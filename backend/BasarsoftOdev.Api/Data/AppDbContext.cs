@@ -1,3 +1,4 @@
+using BasarsoftOdev.Api.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace BasarsoftOdev.Api.Data;
@@ -6,44 +7,72 @@ namespace BasarsoftOdev.Api.Data;
 /// Uygulamanın <b>tek</b> EF Core DbContext'i.
 /// Veritabanına yapılacak tüm sorgular bu sınıf üzerinden geçer.
 /// </summary>
-/// <remarks>
-/// <para>
-/// Entity'ler (örn. <c>MapPoint</c>) bir sonraki adımda eklendiğinde,
-/// <c>DbSet&lt;T&gt;</c> property'leri ve <c>OnModelCreating</c> içinde
-/// konfigürasyonları buraya eklenecek.
-/// </para>
-/// <para>
-/// DI container'a <c>Program.cs</c> içinde <c>AddDbContext&lt;AppDbContext&gt;</c>
-/// ile kaydedilir; PostgreSQL ve PostGIS (NetTopologySuite) sağlayıcılarıyla
-/// yapılandırılır.
-/// </para>
-/// </remarks>
 public class AppDbContext : DbContext
 {
-    /// <summary>
-    /// Constructor — EF Core'un standart pattern'i. Options DI üzerinden
-    /// enjekte edilir.
-    /// </summary>
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
     {
     }
 
     // -----------------------------------------------------------------------
-    // DbSet'ler buraya gelecek (bir sonraki adımda):
-    //   public DbSet<MapPoint> MapPoints => Set<MapPoint>();
+    // DbSet'ler — her DbSet bir tablo. EF Core, set'leri OnModelCreating
+    // içindeki konfigürasyonla birlikte değerlendirip migration üretiyor.
     // -----------------------------------------------------------------------
 
+    /// <summary>Kullanıcının haritaya eklediği nokta kayıtları (CRUD).</summary>
+    public DbSet<MapPoint> MapPoints => Set<MapPoint>();
+
     /// <summary>
-    /// Model yapılandırması (fluent API). Burada tablo isimleri, ilişkiler,
-    /// indeksler ve mekansal sütunlar konfigüre edilecek.
+    /// Model yapılandırması (fluent API). Tablo isimleri, sütun tipleri,
+    /// indeksler ve mekansal sütun ayarları (SRID vb.) burada yapılır.
     /// </summary>
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        // PostGIS eklentisinin EF Core migration tarafından oluşturulan
-        // veritabanlarında otomatik aktif olmasını sağlar. Yerelde elle de
-        // çalıştırdık ama bu satır taşınabilirlik (örn. Railway PostgreSQL)
-        // için kritik.
+        // PostGIS eklentisi: migration uygulandığında DB'de yoksa kurulur.
         modelBuilder.HasPostgresExtension("postgis");
+
+        // -------------------------------------------------------------------
+        // MapPoint entity konfigürasyonu
+        // -------------------------------------------------------------------
+        modelBuilder.Entity<MapPoint>(entity =>
+        {
+            // PostgreSQL/Postgres tablo adı snake_case olsun ki SQL tarafında
+            // double-quote'a ihtiyaç duymadan rahat sorgulayabilelim.
+            entity.ToTable("map_points");
+
+            entity.HasKey(p => p.Id);
+
+            entity.Property(p => p.Name)
+                  .IsRequired()
+                  .HasMaxLength(200);
+
+            entity.Property(p => p.Description)
+                  .HasMaxLength(2000);
+
+            // EN KRİTİK KISIM:
+            // Location alanı PostGIS'in geometry(Point, 4326) tipiyle saklanacak.
+            // Bu sayede DB seviyesinde projeksiyon karışıklığı yaşanmaz ve
+            // mekansal sorgular (ST_DWithin, ST_Within, ST_Buffer...) doğru SRID
+            // ile çalışır. Frontend zaten 4326'da çalıştığı için ekstra dönüşüm
+            // gerekmez.
+            entity.Property(p => p.Location)
+                  .HasColumnType("geometry(Point, 4326)")
+                  .IsRequired();
+
+            // GIST indeksi mekansal aramalar için kritik. Frontend ilerleyen
+            // adımlarda buffer/rectangle/polygon ile sorgu atacak; bu indeks
+            // olmadan bu sorgular tüm tabloyu tarar.
+            entity.HasIndex(p => p.Location)
+                  .HasMethod("gist");
+
+            // Zaman damgaları "timestamp with time zone" olarak saklanır.
+            entity.Property(p => p.CreatedAt)
+                  .HasColumnType("timestamptz")
+                  .IsRequired();
+
+            entity.Property(p => p.UpdatedAt)
+                  .HasColumnType("timestamptz")
+                  .IsRequired();
+        });
 
         base.OnModelCreating(modelBuilder);
     }

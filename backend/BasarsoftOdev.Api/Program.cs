@@ -19,6 +19,7 @@
 // ============================================================================
 
 using BasarsoftOdev.Api.Data;
+using BasarsoftOdev.Api.Services;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -136,6 +137,10 @@ builder.Services.AddDbContext<AppDbContext>(options =>
         npgsql.UseNetTopologySuite();
     });
 });
+
+// Domain servisleri — Controller'lar bu interface'ler üzerinden DB'ye ulaşır.
+// Scoped: request başına bir instance (EF Core DbContext ile aynı yaşam süresi).
+builder.Services.AddScoped<IMapPointService, MapPointService>();
 
 // ---------------------------------------------------------------------------
 // UYGULAMA İNŞA EDİLİYOR
