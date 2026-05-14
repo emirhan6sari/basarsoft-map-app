@@ -1,0 +1,39 @@
+###############################################################################
+# .editorconfig — Başarsoft Map App
+# Tüm editörlerin (VSCode, Visual Studio, Rider, vs.) aynı kod formatını
+# uygulamasını sağlar. Bu sayede ekipte (veya farklı makinelerde) çalışırken
+# satır sonları, girinti tipi ve dosya kodlaması karışmaz.
+# Daha fazla bilgi: https://editorconfig.org
+###############################################################################
+
+# Bu, projenin köküdür; daha üstte başka bir .editorconfig aranmasın
+root = true
+
+# ---------------------------------------------------------------------------
+# Tüm dosyalar için varsayılan kurallar
+# ---------------------------------------------------------------------------
+[*]
+charset = utf-8                  # Türkçe karakterler için UTF-8 zorunlu
+end_of_line = lf                 # Linux/macOS uyumlu; Railway Linux'ta çalışır
+insert_final_newline = true      # Dosya sonunda bir boş satır olsun (Git diff temiz)
+trim_trailing_whitespace = true  # Satır sonundaki gereksiz boşlukları temizle
+indent_style = space             # Tab yerine boşluk kullan
+indent_size = 4                  # Varsayılan girinti: 4 boşluk
+
+# ---------------------------------------------------------------------------
+# C# / Backend dosyaları — 4 boşluk standart
+# ---------------------------------------------------------------------------
+[*.{cs,csproj,sln}]
+indent_size = 4
+
+# ---------------------------------------------------------------------------
+# Frontend dosyaları — JS/TS topluluğu 2 boşluk kullanır
+# ---------------------------------------------------------------------------
+[*.{js,jsx,ts,tsx,json,html,css,scss,md,yml,yaml}]
+indent_size = 2
+
+# ---------------------------------------------------------------------------
+# Markdown dosyaları — satır sonu boşlukları "soft break" anlamı taşır
+# ---------------------------------------------------------------------------
+[*.md]
+trim_trailing_whitespace = false

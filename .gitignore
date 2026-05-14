@@ -1,0 +1,99 @@
+###############################################################################
+# .gitignore — Başarsoft Map App
+# Bu dosya Git'in HANGİ dosyaları takip ETMEMESİ gerektiğini belirtir.
+# Build çıktıları, secret bilgiler, IDE dosyaları ve büyük bağımlılıklar
+# repo'ya girmemelidir. Bu hem repo'yu temiz/küçük tutar hem de güvenliği sağlar.
+###############################################################################
+
+# ---------------------------------------------------------------------------
+# .NET / ASP.NET Core (backend)
+# ---------------------------------------------------------------------------
+# Derleme çıktıları (her makinede yeniden üretilebilir, repo'ya gerek yok)
+**/bin/
+**/obj/
+
+# Visual Studio / Rider kullanıcıya özel dosyalar
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+.vs/
+.idea/
+
+# .NET hassas bilgiler (User Secrets gibi)
+*.pubxml.user
+
+# Geliştirme ortamına özgü ayarlar — DB şifresi vb. burada olabilir, repo'ya GİRMEZ
+backend/**/appsettings.Development.json
+backend/**/appsettings.Local.json
+
+# EF Core test/debug dosyaları
+*.mdf
+*.ldf
+
+# ---------------------------------------------------------------------------
+# Node.js / React / Vite (frontend)
+# ---------------------------------------------------------------------------
+# node_modules devasa, package-lock.json'dan tekrar üretilir
+**/node_modules/
+
+# Vite ve build çıktıları
+frontend/dist/
+frontend/build/
+frontend/.vite/
+
+# Frontend ortam değişkenleri (API URL, secret vb.)
+frontend/.env
+frontend/.env.local
+frontend/.env.*.local
+
+# Frontend cache ve logları
+frontend/.cache/
+frontend/.parcel-cache/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ---------------------------------------------------------------------------
+# IDE / Editör
+# ---------------------------------------------------------------------------
+# VSCode: settings.json paylaşılabilir ama kişisel dosyaları paylaşmayız
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/tasks.json
+
+# JetBrains
+.idea/
+*.iml
+
+# ---------------------------------------------------------------------------
+# OS dosyaları
+# ---------------------------------------------------------------------------
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store
+
+# ---------------------------------------------------------------------------
+# Genel: ortam değişkenleri, log, geçici dosyalar
+# ---------------------------------------------------------------------------
+.env
+.env.local
+*.env.local
+*.tmp
+*.bak
+*.swp
+
+# ---------------------------------------------------------------------------
+# Veritabanı yedekleri (büyük olabilir; sadece "release" anında commit edilir)
+# database/ klasöründeki .backup ve .dump dosyaları büyük olabilir.
+# Eğer küçükse (<10MB) commit'leyebiliriz; büyükse Git LFS veya release ekine koyarız.
+# ---------------------------------------------------------------------------
+# database/*.backup
+# database/*.dump
+# database/*.sql
+# (Yorum olarak bıraktım: ödev teslim ederken dump dosyasını commit'leyeceğiz)
