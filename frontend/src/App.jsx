@@ -1,27 +1,25 @@
 // ============================================================================
 // App.jsx — Uygulamanın kök bileşeni
 // ----------------------------------------------------------------------------
-// Bu dosya uygulamanın ana iskeletini barındırır:
-//   - Üstte bir AppBar (toolbar): solda başlık, ortada AÇILIR MENÜ butonu
-//   - Altta MapView bileşeni: OpenLayers haritası + alt orta koordinat
-//     göstergesi + sağ alt katman paneli
+// Tasarım:
+//   - Harita tüm ekranı kaplar (TAM EKRAN); AppBar yok.
+//   - Üst ortada minimal bir "açılır menü" ikonu (ok) duruyor; tıklayınca
+//     içerden Add Point / Query Points / Layers seçenekleri çıkıyor.
+//   - Harita çevresine yerleştirilmiş kontroller (CoordinateBox, LayersPanel)
+//     MapView içinde absolute olarak konumlanıyor.
 //
-// Açılır menü, eskiden toolbar'da yan yana duran (Add Point / Query Points /
-// Layers) butonlarını tek bir "Menu" buton + dropdown içine taşıdı.
-// Bu sayede toolbar daha temiz, ileride mod sayısı arttıkça da büyümeyecek.
+// Bu yapı kullanıcının ekranını rahatlatıyor — toolbar şişkinliği yok,
+// yalnızca aksiyon istendiğinde menü açılıyor.
 // ============================================================================
 
 import { useState } from 'react';
 import {
-  AppBar,
-  Toolbar,
-  Typography,
-  Button,
   Box,
-  Menu,
-  MenuItem,
-  ListItemIcon,
-  ListItemText,
+  Paper,
+  Stack,
+  IconButton,
+  Button,
+  Popover,
 } from '@mui/material';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import AddLocationAltIcon from '@mui/icons-material/AddLocationAlt';
@@ -43,24 +41,17 @@ const MENU_ITEMS = [
 ];
 
 function App() {
-  // Hangi modun aktif olduğunu tutar (örn. "addPoint", "queryPoints", "layers").
-  // Şu an sadece bilgilendirme amaçlı; ileride modal açma/araç aktif etme
-  // mantığına bağlanacak.
-  const [activeMode, setActiveMode] = useState(null);
+  // Hangi modun aktif olduğunu tutar (placeholder; ileride modal açma vs.)
+  const [, setActiveMode] = useState(null);
 
-  // Menü açık/kapalı durumu. MUI Menu, "anchorEl" ile konumlanır:
-  //   null  → menü kapalı
-  //   bir HTML element → menü o elemente yapışık açılır
+  // MUI Menu'nün hangi elemana yapışıp açılacağını tutuyoruz.
+  // null → menü kapalı, HTML element → o elemanın altına açık
   const [menuAnchor, setMenuAnchor] = useState(null);
   const menuOpen = Boolean(menuAnchor);
 
-  /** Trigger button tıklanınca menüyü aç */
   const openMenu = (event) => setMenuAnchor(event.currentTarget);
-
-  /** Menüyü kapat (dışarı tıklama veya ESC) */
   const closeMenu = () => setMenuAnchor(null);
 
-  /** Bir menü öğesine tıklanınca: modu ayarla + menüyü kapat */
   const handleMenuItemClick = (mode) => {
     setActiveMode(mode);
     closeMenu();
@@ -68,84 +59,82 @@ function App() {
   };
 
   return (
-    // Tüm ekranı kaplayan dikey flex konteyner.
-    // height: 100vh → viewport yüksekliği, böylece harita "geri kalan boşluğu" tam doldurur.
+    // Tüm ekran; harita için tek konteyner.
+    // overflow: hidden → tarayıcı kaydırma çubuğu çıkmasın
     <Box
       sx={{
-        display: 'flex',
-        flexDirection: 'column',
-        height: '100vh',
+        position: 'relative',
         width: '100vw',
+        height: '100vh',
+        overflow: 'hidden',
       }}
     >
-      {/* ===================== ÜST KISIM: TOOLBAR + AÇILIR MENÜ ===================== */}
-      <AppBar position="static" color="primary" elevation={2}>
-        {/* Toolbar'ı 3 sütuna bölüyoruz:
-            sol → başlık
-            orta → menü trigger butonu (resimde işaretlenen merkez konum)
-            sağ → boş (gelecekte kullanıcı/dil/tema butonları için yer) */}
-        <Toolbar sx={{ display: 'flex', alignItems: 'center' }}>
-          {/* SOL: Başlık */}
-          <Box sx={{ flex: '1 1 0', display: 'flex', alignItems: 'center' }}>
-            <Typography variant="h6" component="div">
-              Başarsoft Map App
-              {activeMode && (
-                <Typography
-                  component="span"
-                  variant="caption"
-                  sx={{ ml: 2, opacity: 0.85 }}
-                >
-                  (mod: {activeMode})
-                </Typography>
-              )}
-            </Typography>
-          </Box>
+      {/* Asıl içerik: harita + üstündeki tüm overlay'ler (koordinat, katmanlar) */}
+      <MapView />
 
-          {/* ORTA: Açılır menü trigger butonu */}
-          <Box sx={{ flex: '0 0 auto' }}>
+      {/* ÜST ORTA: floating menü ikonu (tıklayınca dropdown açar) */}
+      <Paper
+        elevation={3}
+        sx={{
+          position: 'absolute',
+          top: 12,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 1100,
+          borderRadius: '50%',
+          backgroundColor: 'rgba(255, 255, 255, 0.96)',
+        }}
+      >
+        {/* Sade ikon — üzerinde tooltip yok (kullanıcı isteği).
+            Erişilebilirlik için aria-label korunuyor. */}
+        <IconButton
+          onClick={openMenu}
+          aria-label="Menü"
+          aria-haspopup="menu"
+          aria-expanded={menuOpen ? 'true' : undefined}
+          size="medium"
+          sx={{
+            // Menü açıkken ok yukarı dönsün (kapalı/açık görsel ipucu)
+            transform: menuOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+            transition: 'transform 0.2s ease',
+          }}
+        >
+          <KeyboardArrowDownIcon />
+        </IconButton>
+      </Paper>
+
+      {/* MUI Popover — Paper'ın altına ortalanmış olarak açılır.
+          İçeride Stack direction="row" ile YATAY buton dizimi var
+          (klasik dikey Menu yerine kompakt, çubuk benzeri bir görünüm). */}
+      <Popover
+        anchorEl={menuAnchor}
+        open={menuOpen}
+        onClose={closeMenu}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'center' }}
+        slotProps={{
+          paper: { sx: { mt: 0.5, borderRadius: 2, overflow: 'visible' } },
+        }}
+      >
+        <Stack direction="row" spacing={0.5} sx={{ p: 0.75 }}>
+          {MENU_ITEMS.map(({ mode, label, Icon }) => (
             <Button
+              key={mode}
+              onClick={() => handleMenuItemClick(mode)}
+              startIcon={<Icon />}
+              size="small"
               color="inherit"
-              onClick={openMenu}
-              endIcon={<KeyboardArrowDownIcon />}
-              aria-haspopup="menu"
-              aria-expanded={menuOpen ? 'true' : undefined}
-              sx={{ textTransform: 'none', fontWeight: 500 }}
-            >
-              Menu
-            </Button>
-
-            {/* MUI Menu: anchorEl, butonun altına konumlanır */}
-            <Menu
-              anchorEl={menuAnchor}
-              open={menuOpen}
-              onClose={closeMenu}
-              anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-              transformOrigin={{ vertical: 'top', horizontal: 'center' }}
-              slotProps={{
-                paper: { sx: { minWidth: 200, mt: 0.5 } },
+              sx={{
+                textTransform: 'none',
+                whiteSpace: 'nowrap',
+                px: 1.5,
               }}
             >
-              {MENU_ITEMS.map(({ mode, label, Icon }) => (
-                <MenuItem key={mode} onClick={() => handleMenuItemClick(mode)}>
-                  <ListItemIcon>
-                    <Icon fontSize="small" />
-                  </ListItemIcon>
-                  <ListItemText>{label}</ListItemText>
-                </MenuItem>
-              ))}
-            </Menu>
-          </Box>
-
-          {/* SAĞ: dengeyi sağlayan boş alan (başlık ile simetri için) */}
-          <Box sx={{ flex: '1 1 0' }} />
-        </Toolbar>
-      </AppBar>
-
-      {/* ===================== ALT KISIM: HARİTA ===================== */}
-      {/* flexGrow: 1 → kalan dikey boşluğu tamamen doldurur (harita için kritik) */}
-      <Box sx={{ flexGrow: 1, position: 'relative' }}>
-        <MapView />
-      </Box>
+              {label}
+            </Button>
+          ))}
+        </Stack>
+      </Popover>
     </Box>
   );
 }

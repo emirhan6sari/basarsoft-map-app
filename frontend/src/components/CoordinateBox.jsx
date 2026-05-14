@@ -5,18 +5,30 @@
 // gösterimi yapılmalıdır."
 //
 // Konum: Haritanın ALT ORTASINDA, yatay (lon ve lat yan yana) bir bant.
-// EPSG:3857 (X/Y) ileride harita tıklama olayında ayrıca gösterilecek
-// (ödev şartı madde 7); şu an mouse hareketinde sadece lon/lat yeterli.
+//
+// Tasarım notu (KRİTİK):
+//   - Lon ve Lat değerleri SABİT GENİŞLİKLİ kutular içinde gösteriliyor.
+//   - Bu sayede değer "—" iken veya "35.12345" iken layout ASLA kaymıyor;
+//     ortadaki dikey ayraç hep tam merkezde duruyor.
+//   - Yazı tipi: monospace (her karakter eşit genişlik) + textAlign: left
+//     (sayılar ondalık noktası hizasında olmasa da, sabit kutu boyutu
+//     sayesinde divider sabit kalıyor).
 // ============================================================================
 
-import { Paper, Stack, Typography, Divider } from '@mui/material';
+import { Paper, Stack, Divider, Box } from '@mui/material';
+
+// Her bir koordinat alanı için sabit genişlik (px). Burası 9 karakter
+// "-123.45678" sığacak şekilde seçildi; 5 ondalık + tam sayı + işaret + ° + boşluk.
+const VALUE_BOX_WIDTH = 160;
 
 /**
  * @param {object} props
  * @param {{ lon: number, lat: number } | null} props.lonLat  EPSG:4326
  */
 function CoordinateBox({ lonLat }) {
-  // Harita dışındaysa "—" göster (kutu sabit kalsın, layout zıplamasın)
+  // İlk açılışta lonLat null gelirse "—" göster.
+  // Fare bir kere haritaya girdikten sonra son değer kalıcı kalır
+  // (MapView artık dışarı çıkışta null'a sıfırlamıyor).
   const lonStr = lonLat ? lonLat.lon.toFixed(5) : '—';
   const latStr = lonLat ? lonLat.lat.toFixed(5) : '—';
 
@@ -32,14 +44,13 @@ function CoordinateBox({ lonLat }) {
 
         px: 2,
         py: 0.75,
-        minWidth: 280,
         backgroundColor: 'rgba(255, 255, 255, 0.94)',
         pointerEvents: 'none', // fare etkileşimini engellemesin
         zIndex: 1000,
-        fontFamily: 'monospace',
       }}
     >
-      {/* Yatay düzen: Lon ve Lat yan yana, ortada ince bir ayraç */}
+      {/* Yatay düzen: SABİT genişlikte iki kutu + ortada dikey ayraç.
+          Stack'in spacing'i ile değil, iç Box'ların minWidth'i ile sabitleme. */}
       <Stack
         direction="row"
         alignItems="center"
@@ -47,12 +58,33 @@ function CoordinateBox({ lonLat }) {
         spacing={2}
         divider={<Divider orientation="vertical" flexItem />}
       >
-        <Typography variant="body2">
-          <strong style={{ color: '#1976d2' }}>Lon:</strong>&nbsp;{lonStr}°
-        </Typography>
-        <Typography variant="body2">
-          <strong style={{ color: '#1976d2' }}>Lat:</strong>&nbsp;{latStr}°
-        </Typography>
+        <Box
+          sx={{
+            minWidth: VALUE_BOX_WIDTH,
+            textAlign: 'center',
+            fontFamily: 'monospace',
+            fontSize: '0.95rem',
+          }}
+        >
+          <Box component="span" sx={{ color: '#1976d2', fontWeight: 'bold' }}>
+            Lon:
+          </Box>{' '}
+          {lonStr}°
+        </Box>
+
+        <Box
+          sx={{
+            minWidth: VALUE_BOX_WIDTH,
+            textAlign: 'center',
+            fontFamily: 'monospace',
+            fontSize: '0.95rem',
+          }}
+        >
+          <Box component="span" sx={{ color: '#1976d2', fontWeight: 'bold' }}>
+            Lat:
+          </Box>{' '}
+          {latStr}°
+        </Box>
       </Stack>
     </Paper>
   );
