@@ -79,7 +79,15 @@ var resolvedConnectionString = ResolveConnectionString(builder.Configuration);
 // ---------------------------------------------------------------------------
 
 // Controller-based API: attribute routing ([Route], [HttpGet] vb.) kullanılacak
-builder.Services.AddControllers();
+// JsonStringEnumConverter: enum alanları JSON'da sayı (0/1/2) değil STRING
+// ("Depo"/"Bayi"...) olarak serialize/deserialize edilir. Frontend string gönderir,
+// backend string olarak okur. Bu olmadan "Depo" → hata verir.
+builder.Services.AddControllers()
+    .AddJsonOptions(opts =>
+    {
+        opts.JsonSerializerOptions.Converters.Add(
+            new System.Text.Json.Serialization.JsonStringEnumConverter());
+    });
 
 // Swagger / OpenAPI dokümantasyonu üreten servis.
 // AddEndpointsApiExplorer: Minimal API endpoint'lerinin de keşfedilmesini sağlar.
