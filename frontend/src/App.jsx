@@ -2,12 +2,13 @@
 // App.jsx — Uygulamanın kök bileşeni
 // ----------------------------------------------------------------------------
 // Bu dosya uygulamanın ana iskeletini barındırır:
-//   - Üstte bir AppBar (toolbar): başlık + butonlar (Add Point, Query Points, ...)
-//   - Altta MapView bileşeni: OpenLayers haritası
+//   - Üstte bir AppBar (toolbar): solda başlık, ortada AÇILIR MENÜ butonu
+//   - Altta MapView bileşeni: OpenLayers haritası + alt orta koordinat
+//     göstergesi + sağ alt katman paneli
 //
-// Sonraki adımlarda:
-//   - Butonlar ilgili modal / araçları açacak (nokta ekleme, sorgu vb.)
-//   - Backend API çağrıları axios üzerinden yapılacak
+// Açılır menü, eskiden toolbar'da yan yana duran (Add Point / Query Points /
+// Layers) butonlarını tek bir "Menu" buton + dropdown içine taşıdı.
+// Bu sayede toolbar daha temiz, ileride mod sayısı arttıkça da büyümeyecek.
 // ============================================================================
 
 import { useState } from 'react';
@@ -17,8 +18,12 @@ import {
   Typography,
   Button,
   Box,
-  Stack,
+  Menu,
+  MenuItem,
+  ListItemIcon,
+  ListItemText,
 } from '@mui/material';
+import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import AddLocationAltIcon from '@mui/icons-material/AddLocationAlt';
 import TableChartIcon from '@mui/icons-material/TableChart';
 import LayersIcon from '@mui/icons-material/Layers';
@@ -26,18 +31,39 @@ import LayersIcon from '@mui/icons-material/Layers';
 import MapView from './components/MapView';
 
 /**
- * Uygulamanın kök bileşeni.
- * Toolbar + harita layout'unu kurar.
+ * Menü öğesinin tanımı. Her aksiyon için tek bir kayıt:
+ *   - mode: state'e yazılacak değer (ileride hangi modal/aracın açılacağını belirleyecek)
+ *   - label: kullanıcıya görünen yazı
+ *   - icon: solda gösterilecek MUI ikonu
  */
+const MENU_ITEMS = [
+  { mode: 'addPoint',    label: 'Add Point',    Icon: AddLocationAltIcon },
+  { mode: 'queryPoints', label: 'Query Points', Icon: TableChartIcon },
+  { mode: 'layers',      label: 'Layers',       Icon: LayersIcon },
+];
+
 function App() {
-  // Geçici state: hangi modun aktif olduğunu tutacak (örn. "addPoint", "query").
-  // Şimdilik kullanılmıyor, sadece toolbar tıklamasını test etmek için.
+  // Hangi modun aktif olduğunu tutar (örn. "addPoint", "queryPoints", "layers").
+  // Şu an sadece bilgilendirme amaçlı; ileride modal açma/araç aktif etme
+  // mantığına bağlanacak.
   const [activeMode, setActiveMode] = useState(null);
 
-  // Toolbar butonu tıklandığında çağrılacak.
-  // Şimdilik sadece state'i güncelliyor; ileride modal açma vb. yapacak.
-  const handleToolbarAction = (mode) => {
+  // Menü açık/kapalı durumu. MUI Menu, "anchorEl" ile konumlanır:
+  //   null  → menü kapalı
+  //   bir HTML element → menü o elemente yapışık açılır
+  const [menuAnchor, setMenuAnchor] = useState(null);
+  const menuOpen = Boolean(menuAnchor);
+
+  /** Trigger button tıklanınca menüyü aç */
+  const openMenu = (event) => setMenuAnchor(event.currentTarget);
+
+  /** Menüyü kapat (dışarı tıklama veya ESC) */
+  const closeMenu = () => setMenuAnchor(null);
+
+  /** Bir menü öğesine tıklanınca: modu ayarla + menüyü kapat */
+  const handleMenuItemClick = (mode) => {
     setActiveMode(mode);
+    closeMenu();
     console.log('Toolbar action:', mode, '(henüz implemente edilmedi)');
   };
 
@@ -52,42 +78,66 @@ function App() {
         width: '100vw',
       }}
     >
-      {/* ===================== ÜST KISIM: TOOLBAR ===================== */}
+      {/* ===================== ÜST KISIM: TOOLBAR + AÇILIR MENÜ ===================== */}
       <AppBar position="static" color="primary" elevation={2}>
-        <Toolbar>
-          <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-            Başarsoft Map App
-            {activeMode && (
-              <Typography component="span" variant="caption" sx={{ ml: 2, opacity: 0.8 }}>
-                (mod: {activeMode})
-              </Typography>
-            )}
-          </Typography>
+        {/* Toolbar'ı 3 sütuna bölüyoruz:
+            sol → başlık
+            orta → menü trigger butonu (resimde işaretlenen merkez konum)
+            sağ → boş (gelecekte kullanıcı/dil/tema butonları için yer) */}
+        <Toolbar sx={{ display: 'flex', alignItems: 'center' }}>
+          {/* SOL: Başlık */}
+          <Box sx={{ flex: '1 1 0', display: 'flex', alignItems: 'center' }}>
+            <Typography variant="h6" component="div">
+              Başarsoft Map App
+              {activeMode && (
+                <Typography
+                  component="span"
+                  variant="caption"
+                  sx={{ ml: 2, opacity: 0.85 }}
+                >
+                  (mod: {activeMode})
+                </Typography>
+              )}
+            </Typography>
+          </Box>
 
-          {/* Toolbar butonları — şu an placeholder; ileride gerçek aksiyonlara bağlanacak */}
-          <Stack direction="row" spacing={1}>
+          {/* ORTA: Açılır menü trigger butonu */}
+          <Box sx={{ flex: '0 0 auto' }}>
             <Button
               color="inherit"
-              startIcon={<AddLocationAltIcon />}
-              onClick={() => handleToolbarAction('addPoint')}
+              onClick={openMenu}
+              endIcon={<KeyboardArrowDownIcon />}
+              aria-haspopup="menu"
+              aria-expanded={menuOpen ? 'true' : undefined}
+              sx={{ textTransform: 'none', fontWeight: 500 }}
             >
-              Add Point
+              Menu
             </Button>
-            <Button
-              color="inherit"
-              startIcon={<TableChartIcon />}
-              onClick={() => handleToolbarAction('queryPoints')}
+
+            {/* MUI Menu: anchorEl, butonun altına konumlanır */}
+            <Menu
+              anchorEl={menuAnchor}
+              open={menuOpen}
+              onClose={closeMenu}
+              anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+              transformOrigin={{ vertical: 'top', horizontal: 'center' }}
+              slotProps={{
+                paper: { sx: { minWidth: 200, mt: 0.5 } },
+              }}
             >
-              Query Points
-            </Button>
-            <Button
-              color="inherit"
-              startIcon={<LayersIcon />}
-              onClick={() => handleToolbarAction('layers')}
-            >
-              Layers
-            </Button>
-          </Stack>
+              {MENU_ITEMS.map(({ mode, label, Icon }) => (
+                <MenuItem key={mode} onClick={() => handleMenuItemClick(mode)}>
+                  <ListItemIcon>
+                    <Icon fontSize="small" />
+                  </ListItemIcon>
+                  <ListItemText>{label}</ListItemText>
+                </MenuItem>
+              ))}
+            </Menu>
+          </Box>
+
+          {/* SAĞ: dengeyi sağlayan boş alan (başlık ile simetri için) */}
+          <Box sx={{ flex: '1 1 0' }} />
         </Toolbar>
       </AppBar>
 
