@@ -3,10 +3,9 @@
 // ----------------------------------------------------------------------------
 // Bu dosya uygulamanın ana iskeletini barındırır:
 //   - Üstte bir AppBar (toolbar): başlık + butonlar (Add Point, Query Points, ...)
-//   - Altta harita için ayrılmış bir alan (şu an placeholder)
+//   - Altta MapView bileşeni: OpenLayers haritası
 //
 // Sonraki adımlarda:
-//   - Harita placeholder yerine gerçek OpenLayers haritası gelecek
 //   - Butonlar ilgili modal / araçları açacak (nokta ekleme, sorgu vb.)
 //   - Backend API çağrıları axios üzerinden yapılacak
 // ============================================================================
@@ -24,10 +23,11 @@ import AddLocationAltIcon from '@mui/icons-material/AddLocationAlt';
 import TableChartIcon from '@mui/icons-material/TableChart';
 import LayersIcon from '@mui/icons-material/Layers';
 
+import MapView from './components/MapView';
+
 /**
  * Uygulamanın kök bileşeni.
- * Şu an: statik bir iskelet (toolbar + placeholder harita alanı).
- * Sonraki adımlarda harita ve modal'lar entegre edilecek.
+ * Toolbar + harita layout'unu kurar.
  */
 function App() {
   // Geçici state: hangi modun aktif olduğunu tutacak (örn. "addPoint", "query").
@@ -38,7 +38,7 @@ function App() {
   // Şimdilik sadece state'i güncelliyor; ileride modal açma vb. yapacak.
   const handleToolbarAction = (mode) => {
     setActiveMode(mode);
-    console.log('Toolbar action:', mode);
+    console.log('Toolbar action:', mode, '(henüz implemente edilmedi)');
   };
 
   return (
@@ -57,6 +57,11 @@ function App() {
         <Toolbar>
           <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
             Başarsoft Map App
+            {activeMode && (
+              <Typography component="span" variant="caption" sx={{ ml: 2, opacity: 0.8 }}>
+                (mod: {activeMode})
+              </Typography>
+            )}
           </Typography>
 
           {/* Toolbar butonları — şu an placeholder; ileride gerçek aksiyonlara bağlanacak */}
@@ -86,30 +91,10 @@ function App() {
         </Toolbar>
       </AppBar>
 
-      {/* ===================== ALT KISIM: HARİTA ALANI ===================== */}
+      {/* ===================== ALT KISIM: HARİTA ===================== */}
       {/* flexGrow: 1 → kalan dikey boşluğu tamamen doldurur (harita için kritik) */}
-      <Box
-        sx={{
-          flexGrow: 1,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          backgroundColor: '#e8eef3',
-          color: '#456',
-          position: 'relative',
-        }}
-      >
-        <Stack alignItems="center" spacing={1}>
-          <Typography variant="h5">Harita burada olacak</Typography>
-          <Typography variant="body2">
-            Bir sonraki adımda OpenLayers haritası bu alana yerleşecek.
-          </Typography>
-          {activeMode && (
-            <Typography variant="caption" color="primary">
-              (Test: son seçilen mod → <strong>{activeMode}</strong>)
-            </Typography>
-          )}
-        </Stack>
+      <Box sx={{ flexGrow: 1, position: 'relative' }}>
+        <MapView />
       </Box>
     </Box>
   );
