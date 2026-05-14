@@ -1,0 +1,7 @@
+/* ============================================================================
+ * App.css — App bileşenine özel stiller
+ * ----------------------------------------------------------------------------
+ * MUI ile stil tanımları çoğunlukla sx prop'u veya styled() üzerinden
+ * yapılacak. Bu dosya gerekirse OpenLayers popup, custom marker gibi
+ * şeyler için kullanılır.
+ * ========================================================================== */
