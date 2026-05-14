@@ -35,9 +35,21 @@ public class MapPoint
     public string Name { get; set; } = string.Empty;
 
     /// <summary>
+    /// Numara / Kod — iş tarafında noktayı kısa ve benzersiz şekilde tanımlar
+    /// (örn. "DEP-001", "BAYI-42"). Şu an benzersizlik zorlanmıyor; iş kuralı
+    /// netleşince UNIQUE indeks eklenebilir.
+    /// </summary>
+    public string Number { get; set; } = string.Empty;
+
+    /// <summary>
     /// Opsiyonel açıklama. Notlar, tag'ler vs.
     /// </summary>
     public string? Description { get; set; }
+
+    /// <summary>
+    /// İş tarafında nokta türü. DB'de string olarak saklanır.
+    /// </summary>
+    public MapPointCategory Category { get; set; } = MapPointCategory.Depo;
 
     /// <summary>
     /// Noktanın coğrafi konumu. EPSG:4326 (lon, lat) cinsinden.

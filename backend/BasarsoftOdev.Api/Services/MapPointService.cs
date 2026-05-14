@@ -53,7 +53,9 @@ public class MapPointService : IMapPointService
         {
             Id = Guid.NewGuid(),
             Name = dto.Name.Trim(),
+            Number = dto.Number.Trim(),
             Description = string.IsNullOrWhiteSpace(dto.Description) ? null : dto.Description.Trim(),
+            Category = dto.Category,
             Location = CreatePoint(dto.Longitude, dto.Latitude),
             CreatedAt = now,
             UpdatedAt = now,
@@ -74,7 +76,9 @@ public class MapPointService : IMapPointService
         }
 
         entity.Name = dto.Name.Trim();
+        entity.Number = dto.Number.Trim();
         entity.Description = string.IsNullOrWhiteSpace(dto.Description) ? null : dto.Description.Trim();
+        entity.Category = dto.Category;
         entity.Location = CreatePoint(dto.Longitude, dto.Latitude);
         entity.UpdatedAt = DateTime.UtcNow;
 
@@ -107,14 +111,41 @@ public class MapPointService : IMapPointService
     private static Point CreatePoint(double longitude, double latitude)
         => GeometryFactoryWgs84.CreatePoint(new Coordinate(longitude, latitude));
 
-    private static MapPointResponseDto ToResponseDto(MapPoint entity) => new()
+    private static MapPointResponseDto ToResponseDto(MapPoint entity)
     {
-        Id = entity.Id,
-        Name = entity.Name,
-        Description = entity.Description,
-        Longitude = entity.Location.X,
-        Latitude = entity.Location.Y,
-        CreatedAt = entity.CreatedAt,
-        UpdatedAt = entity.UpdatedAt,
-    };
+        var (xMercator, yMercator) = LonLatToMercator(entity.Location.X, entity.Location.Y);
+        return new MapPointResponseDto
+        {
+            Id = entity.Id,
+            Name = entity.Name,
+            Number = entity.Number,
+            Description = entity.Description,
+            Category = entity.Category,
+            Longitude = entity.Location.X,
+            Latitude = entity.Location.Y,
+            XMercator = xMercator,
+            YMercator = yMercator,
+            CreatedAt = entity.CreatedAt,
+            UpdatedAt = entity.UpdatedAt,
+        };
+    }
+
+    // ----------------------------------------------------------------------
+    // EPSG:4326 → EPSG:3857 (Spherical / Web Mercator) dönüşümü
+    // ----------------------------------------------------------------------
+    // Formül her yerde bulunabilir (OpenLayers, proj4, Wikipedia "Web Mercator").
+    // Backend tarafında ek bağımlılığa girmemek için kendimiz hesaplıyoruz.
+    // Yer küresi yarıçapı (Sphere): 6 378 137 m — standart.
+    private const double EarthRadiusMeters = 6378137.0;
+
+    private static (double X, double Y) LonLatToMercator(double lon, double lat)
+    {
+        var x = lon * Math.PI / 180.0 * EarthRadiusMeters;
+
+        // Mercator y, kutup yakınında sonsuza gider; lat'i ±85.05113° sınırla.
+        var latClamped = Math.Max(-85.05112878, Math.Min(85.05112878, lat));
+        var y = Math.Log(Math.Tan((90.0 + latClamped) * Math.PI / 360.0)) * EarthRadiusMeters;
+
+        return (x, y);
+    }
 }

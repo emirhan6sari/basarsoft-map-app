@@ -45,8 +45,21 @@ public class AppDbContext : DbContext
                   .IsRequired()
                   .HasMaxLength(200);
 
+            // Numara / Kod — zorunlu, kısa. Şimdilik UNIQUE yok; sonra
+            // iş kuralı netleşince HasIndex(...).IsUnique() eklenebilir.
+            entity.Property(p => p.Number)
+                  .IsRequired()
+                  .HasMaxLength(50);
+
             entity.Property(p => p.Description)
                   .HasMaxLength(2000);
+
+            // Category: enum'ı DB'ye string olarak yazıyoruz. Sayı yerine
+            // string saklamak SQL üzerinden bakarken çok daha okunur.
+            entity.Property(p => p.Category)
+                  .IsRequired()
+                  .HasConversion<string>()
+                  .HasMaxLength(32);
 
             // EN KRİTİK KISIM:
             // Location alanı PostGIS'in geometry(Point, 4326) tipiyle saklanacak.

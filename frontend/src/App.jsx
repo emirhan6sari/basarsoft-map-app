@@ -41,8 +41,9 @@ const MENU_ITEMS = [
 ];
 
 function App() {
-  // Hangi modun aktif olduğunu tutar (placeholder; ileride modal açma vs.)
-  const [, setActiveMode] = useState(null);
+  // Hangi mod aktif: 'addPoint' | 'queryPoints' | 'layers' | null.
+  // MapView bu propu okuyarak ona göre davranır (örn. addPoint → click handler).
+  const [activeMode, setActiveMode] = useState(null);
 
   // MUI Menu'nün hangi elemana yapışıp açılacağını tutuyoruz.
   // null → menü kapalı, HTML element → o elemanın altına açık
@@ -55,8 +56,10 @@ function App() {
   const handleMenuItemClick = (mode) => {
     setActiveMode(mode);
     closeMenu();
-    console.log('Toolbar action:', mode, '(henüz implemente edilmedi)');
   };
+
+  /** MapView, modu "tükettiğinde" (örn. nokta eklendi) bunu çağırarak temizler. */
+  const handleModeConsumed = () => setActiveMode(null);
 
   return (
     // Tüm ekran; harita için tek konteyner.
@@ -70,7 +73,7 @@ function App() {
       }}
     >
       {/* Asıl içerik: harita + üstündeki tüm overlay'ler (koordinat, katmanlar) */}
-      <MapView />
+      <MapView activeMode={activeMode} onModeConsumed={handleModeConsumed} />
 
       {/* ÜST ORTA: floating menü ikonu (tıklayınca dropdown açar) */}
       <Paper
