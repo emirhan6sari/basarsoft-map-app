@@ -7,14 +7,19 @@
 //
 // Akış:
 //   1) WebApplicationBuilder oluşturulur
-//   2) Servisler DI (Dependency Injection) container'a eklenir:
+//   2) Konfigürasyon (appsettings + env variables) yüklenir
+//   3) Servisler DI container'a eklenir:
 //        - Controllers (REST API endpoint'leri için)
 //        - Swagger / OpenAPI (geliştirme sırasında API'yi görsel incelemek için)
 //        - CORS (frontend'in başka portta çalışırken backend'i çağırabilmesi)
-//   3) Uygulama build edilir
-//   4) HTTP request pipeline (middleware sırası) kurulur
-//   5) Uygulama çalıştırılır
+//        - EF Core DbContext (PostgreSQL + PostGIS NetTopologySuite)
+//   4) Uygulama build edilir
+//   5) HTTP request pipeline (middleware sırası) kurulur
+//   6) Uygulama çalıştırılır
 // ============================================================================
+
+using BasarsoftOdev.Api.Data;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -26,6 +31,47 @@ var builder = WebApplication.CreateBuilder(args);
 // Canlı ortamda Railway URL'i environment variable üzerinden eklenecek.
 // ---------------------------------------------------------------------------
 const string FrontendCorsPolicy = "FrontendCorsPolicy";
+
+// ---------------------------------------------------------------------------
+// CONNECTION STRING ÇÖZÜMLEMESİ
+// ----------------------------------------------------------------------------
+// 1) Önce ConnectionStrings:DefaultConnection okunur (appsettings.*.json).
+// 2) Yoksa veya boşsa, Railway'in sağladığı DATABASE_URL environment variable
+//    aranır. Railway DATABASE_URL'i URI biçiminde verir
+//    ("postgresql://user:pass@host:port/db"); Npgsql doğrudan kabul etmez.
+//    Bu nedenle URI parse edip key=value formatına çeviriyoruz.
+// 3) Hiçbiri yoksa açıklayıcı bir hata fırlatılır (sessizce ölmesin).
+// ---------------------------------------------------------------------------
+string ResolveConnectionString(IConfiguration configuration)
+{
+    var connectionString = configuration.GetConnectionString("DefaultConnection");
+    if (!string.IsNullOrWhiteSpace(connectionString))
+    {
+        return connectionString;
+    }
+
+    var databaseUrl = Environment.GetEnvironmentVariable("DATABASE_URL");
+    if (!string.IsNullOrWhiteSpace(databaseUrl))
+    {
+        // postgresql://username:password@host:port/database  →  Key=Value;...
+        var uri = new Uri(databaseUrl);
+        var userInfo = uri.UserInfo.Split(':', 2);
+        var username = Uri.UnescapeDataString(userInfo[0]);
+        var password = userInfo.Length > 1 ? Uri.UnescapeDataString(userInfo[1]) : string.Empty;
+        var database = uri.AbsolutePath.TrimStart('/');
+
+        // Railway'in PostgreSQL servisi SSL'i destekler/önerir; "Require"
+        // kullanarak güvenli bağlantı zorluyoruz. Local'da bu zaten yoksayılır.
+        return $"Host={uri.Host};Port={uri.Port};Database={database};Username={username};Password={password};SSL Mode=Require;Trust Server Certificate=true";
+    }
+
+    throw new InvalidOperationException(
+        "Veritabanı bağlantı string'i bulunamadı. "
+        + "Lütfen appsettings.Development.json içine ConnectionStrings:DefaultConnection ekleyin "
+        + "veya DATABASE_URL environment variable tanımlayın.");
+}
+
+var resolvedConnectionString = ResolveConnectionString(builder.Configuration);
 
 // ---------------------------------------------------------------------------
 // SERVİS KAYITLARI (DI container'a hizmetler ekleniyor)
@@ -61,12 +107,33 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy(FrontendCorsPolicy, policy =>
     {
-        policy.WithOrigins(
-                  "http://localhost:5173", // Vite dev server (npm run dev)
-                  "http://localhost:4173"  // Vite preview server (npm run preview)
-              )
+        // appsettings.json -> "Cors:AllowedOrigins" listesi (canlı için)
+        var configuredOrigins = builder.Configuration
+            .GetSection("Cors:AllowedOrigins")
+            .Get<string[]>() ?? Array.Empty<string>();
+
+        var allowedOrigins = new[]
+        {
+            "http://localhost:5173", // Vite dev server (npm run dev)
+            "http://localhost:4173"  // Vite preview server (npm run preview)
+        }.Concat(configuredOrigins).ToArray();
+
+        policy.WithOrigins(allowedOrigins)
               .AllowAnyHeader()
               .AllowAnyMethod();
+    });
+});
+
+// EF Core DbContext kaydı.
+// - UseNpgsql: PostgreSQL sağlayıcısı
+// - UseNetTopologySuite: PostGIS desteği. Bu çağrı sayesinde C# tarafında
+//   Point/Polygon/Geometry tipleri direkt kullanılabilir, EF Core onları
+//   geometry(...) sütunlarına otomatik map eder.
+builder.Services.AddDbContext<AppDbContext>(options =>
+{
+    options.UseNpgsql(resolvedConnectionString, npgsql =>
+    {
+        npgsql.UseNetTopologySuite();
     });
 });
 
@@ -121,6 +188,42 @@ app.MapGet("/", () => Results.Ok(new
     docs = "/swagger"
 }))
 .WithName("Root")
+.WithTags("Health");
+
+// Veritabanı bağlantı testi endpoint'i. Tarayıcıdan açıp veya curl ile
+// çağırarak "DB ile gerçekten konuşabiliyor muyuz?" kontrol edebiliriz.
+// Bir sonraki adımda gerçek tabloları eklediğimizde, burası daha anlamlı olacak.
+app.MapGet("/health/db", async (AppDbContext db) =>
+{
+    try
+    {
+        var canConnect = await db.Database.CanConnectAsync();
+        if (!canConnect)
+        {
+            return Results.Problem("Veritabanına bağlanılamadı.", statusCode: 503);
+        }
+
+        // PostGIS sürümünü raw SQL ile çekiyoruz (entity yok henüz).
+        var postgisVersion = await db.Database
+            .SqlQueryRaw<string>("SELECT PostGIS_Version() AS \"Value\"")
+            .FirstOrDefaultAsync();
+
+        return Results.Ok(new
+        {
+            connected = true,
+            postgisVersion = postgisVersion ?? "(bilinmiyor)",
+            timestamp = DateTime.UtcNow
+        });
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem(
+            title: "Veritabanı bağlantı hatası",
+            detail: ex.Message,
+            statusCode: 500);
+    }
+})
+.WithName("DbHealthCheck")
 .WithTags("Health");
 
 app.Run();
