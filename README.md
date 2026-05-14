@@ -1,8 +1,8 @@
 # Başarsoft — OpenLayers Tabanlı Web Harita Uygulaması
 
 > **Başvuru:** Başarsoft İşe Giriş Case Çalışması
-> **Aday:** _(adınızı buraya yazın)_
-> **Teslim Tarihi:** _(tarih)_
+> **Aday:** *(adınızı buraya yazın)*
+> **Teslim Tarihi:** *(tarih)*
 
 OpenLayers tabanlı bir web harita uygulaması. Kullanıcılar harita üzerine nokta ekleyebilir, sorgulayabilir, mekansal filtre uygulayabilir (buffer / dikdörtgen / poligon), koordinat dönüşümü (EPSG:4326 ↔ EPSG:3857) yapabilir ve verileri GeoJSON olarak dışa aktarabilir.
 
@@ -29,31 +29,33 @@ OpenLayers tabanlı bir web harita uygulaması. Kullanıcılar harita üzerine n
 
 > Bu liste geliştirme ilerledikçe işaretlenecek.
 
-- [ ] Harita açılışı (OpenStreetMap base layer, Türkiye odaklı zoom)
-- [ ] Mouse konumuna göre anlık koordinat gösterimi
-- [ ] Nokta ekleme (modal ile ad, numara, açıklama, kategori)
-- [ ] Nokta listeleme, filtreleme, sıralama
-- [ ] Kayıtlı noktaların haritada cluster ile gösterimi
-- [ ] Kategoriye göre farklı icon/stil
-- [ ] Popup ile nokta güncelleme & silme (onaylı)
-- [ ] Mekansal sorgular: Buffer (500/1000/5000 m), Dikdörtgen, Poligon
-- [ ] Koordinat dönüşümü EPSG:4326 ↔ EPSG:3857
-- [ ] GeoJSON / CSV export
-- [ ] Katman yönetimi (OSM, Noktalar, Yardımcı katman)
+- Harita açılışı (OpenStreetMap base layer, Türkiye odaklı zoom)
+- Mouse konumuna göre anlık koordinat gösterimi
+- Nokta ekleme (modal ile ad, numara, açıklama, kategori)
+- Nokta listeleme, filtreleme, sıralama
+- Kayıtlı noktaların haritada cluster ile gösterimi
+- Kategoriye göre farklı icon/stil
+- Popup ile nokta güncelleme & silme (onaylı)
+- Mekansal sorgular: Buffer (500/1000/5000 m), Dikdörtgen, Poligon
+- Koordinat dönüşümü EPSG:4326 ↔ EPSG:3857
+- GeoJSON / CSV export
+- Katman yönetimi (OSM, Noktalar, Yardımcı katman)
 
 ---
 
 ## Teknoloji Seçimleri ve Mimari
 
-| Katman | Teknoloji | Sürüm | Neden? |
-|---|---|---|---|
-| Frontend | React (Vite) | 18+ | Hızlı geliştirme, geniş ekosistem, ödev şartı |
-| Harita | OpenLayers | 9+ | Ödev şartı (6+); gelişmiş mekansal yetenekler |
-| Backend | ASP.NET Core Web API | .NET 9 | Ödev şartı; performanslı, modern |
-| ORM | EF Core + NetTopologySuite | 9.x | PostGIS uyumlu mekansal tip desteği |
-| Veritabanı | PostgreSQL + PostGIS | 16 / 3.5 | Mekansal sorgular için endüstri standardı |
-| Stil/UI | _(MUI veya Antd — sonra belirlenecek)_ | - | Modal, tablo, form için hazır bileşenler |
-| Yayın | Railway | - | GitHub'a bağlı otomatik deploy, PostgreSQL servisi sunar |
+
+| Katman     | Teknoloji                              | Sürüm    | Neden?                                                   |
+| ---------- | -------------------------------------- | -------- | -------------------------------------------------------- |
+| Frontend   | React (Vite)                           | 18+      | Hızlı geliştirme, geniş ekosistem, ödev şartı            |
+| Harita     | OpenLayers                             | 9+       | Ödev şartı (6+); gelişmiş mekansal yetenekler            |
+| Backend    | ASP.NET Core Web API                   | .NET 9   | Ödev şartı; performanslı, modern                         |
+| ORM        | EF Core + NetTopologySuite             | 9.x      | PostGIS uyumlu mekansal tip desteği                      |
+| Veritabanı | PostgreSQL + PostGIS                   | 16 / 3.5 | Mekansal sorgular için endüstri standardı                |
+| Stil/UI    | *(MUI veya Antd — sonra belirlenecek)* | -        | Modal, tablo, form için hazır bileşenler                 |
+| Yayın      | Railway                                | -        | GitHub'a bağlı otomatik deploy, PostgreSQL servisi sunar |
+
 
 ### Neden PostgreSQL + PostGIS?
 
@@ -94,12 +96,14 @@ basarsoft-map-app/
 
 ### Önkoşullar
 
-| Araç | Sürüm |
-|---|---|
-| .NET SDK | 8.0 veya 9.0 |
-| Node.js | 20+ |
+
+| Araç       | Sürüm                 |
+| ---------- | --------------------- |
+| .NET SDK   | 8.0 veya 9.0          |
+| Node.js    | 20+                   |
 | PostgreSQL | 16+ (PostGIS 3.x ile) |
-| Git | 2.40+ |
+| Git        | 2.40+                 |
+
 
 ### Veritabanı (PostgreSQL + PostGIS)
 
@@ -140,21 +144,25 @@ Frontend `http://localhost:5173` üzerinde açılır.
 
 ## Konfigürasyon (Environment Variables)
 
-> **🔒 Önemli:** Connection string asla repo'ya commit edilmez. Aşağıdaki ayarlar **environment variable** veya **`appsettings.Development.json`** (gitignore'da) üzerinden verilir.
+> **🔒 Önemli:** Connection string asla repo'ya commit edilmez. Aşağıdaki ayarlar **environment variable** veya `**appsettings.Development.json`** (gitignore'da) üzerinden verilir.
 
 ### Backend
 
-| Değişken | Açıklama | Örnek (yerel) |
-|---|---|---|
-| `ConnectionStrings__DefaultConnection` | PostgreSQL bağlantı string'i | `Host=localhost;Port=5432;Database=basarsoft_map;Username=postgres;Password=...` |
-| `DATABASE_URL` | Railway'in otomatik sağladığı URL | `postgresql://user:pass@host:port/db` |
-| `Cors__AllowedOrigins` | İzin verilen frontend origin'leri | `http://localhost:5173` |
+
+| Değişken                               | Açıklama                          | Örnek (yerel)                                                                    |
+| -------------------------------------- | --------------------------------- | -------------------------------------------------------------------------------- |
+| `ConnectionStrings__DefaultConnection` | PostgreSQL bağlantı string'i      | `Host=localhost;Port=5432;Database=basarsoft_map;Username=postgres;Password=...` |
+| `DATABASE_URL`                         | Railway'in otomatik sağladığı URL | `postgresql://user:pass@host:port/db`                                            |
+| `Cors__AllowedOrigins`                 | İzin verilen frontend origin'leri | `http://localhost:5173`                                                          |
+
 
 ### Frontend
 
-| Değişken | Açıklama | Örnek |
-|---|---|---|
+
+| Değişken            | Açıklama              | Örnek                   |
+| ------------------- | --------------------- | ----------------------- |
 | `VITE_API_BASE_URL` | Backend API kök URL'i | `http://localhost:5000` |
+
 
 ---
 
@@ -178,7 +186,7 @@ pg_restore -U postgres -h localhost -d basarsoft_map -c database/basarsoft_map_b
 
 ## Canlı Yayın (Railway Deployment)
 
-> _(Bu bölüm canlıya alma adımında doldurulacak.)_
+> *(Bu bölüm canlıya alma adımında doldurulacak.)*
 
 - Railway hesabı oluştur
 - GitHub repo'sunu Railway'e bağla
@@ -187,13 +195,13 @@ pg_restore -U postgres -h localhost -d basarsoft_map -c database/basarsoft_map_b
 - Frontend için service ekle: `frontend` root path
 - Environment variable'ları gir (`DATABASE_URL` otomatik, `VITE_API_BASE_URL` elle)
 
-**Canlı URL:** _(deploy sonrası eklenecek)_
+**Canlı URL:** *(deploy sonrası eklenecek)*
 
 ---
 
 ## Bilinen Sınırlamalar / Geliştirilebilir Yönler
 
-> _(Geliştirme tamamlandıkça doldurulacak.)_
+> *(Geliştirme tamamlandıkça doldurulacak.)*
 
 - Authentication implement edilmedi (opsiyonel madde)
 - Unit test kapsamı sınırlı (opsiyonel madde)
