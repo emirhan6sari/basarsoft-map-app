@@ -1,7 +1,9 @@
 using System.Security.Claims;
 using BasarsoftOdev.BLL.Common;
 using BasarsoftOdev.BLL.Dtos;
+using BasarsoftOdev.BLL.Exceptions;
 using BasarsoftOdev.BLL.Interfaces;
+using FluentValidation;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -14,8 +16,13 @@ namespace BasarsoftOdev.Api.Controllers;
 public class MapPointsController : ControllerBase
 {
     private readonly IMapPointService _service;
+    private readonly IValidator<MapPointBBoxDto> _bboxValidator;
 
-    public MapPointsController(IMapPointService service) => _service = service;
+    public MapPointsController(IMapPointService service, IValidator<MapPointBBoxDto> bboxValidator)
+    {
+        _service = service;
+        _bboxValidator = bboxValidator;
+    }
 
     private Guid CurrentUserId =>
         Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)
@@ -26,11 +33,46 @@ public class MapPointsController : ControllerBase
 
     [HttpGet]
     [Authorize(Roles = "Admin,User")]
-    [ProducesResponseType(typeof(ApiResponse<IReadOnlyList<MapPointResponseDto>>), StatusCodes.Status200OK)]
-    public async Task<ActionResult<ApiResponse<IReadOnlyList<MapPointResponseDto>>>> GetAll(CancellationToken ct)
+    [ProducesResponseType(typeof(ApiResponse<MapPointListResultDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<ApiResponse<MapPointListResultDto>>> GetAll(
+        [FromQuery] double? minLon,
+        [FromQuery] double? minLat,
+        [FromQuery] double? maxLon,
+        [FromQuery] double? maxLat,
+        [FromQuery] int? limit,
+        CancellationToken ct)
     {
-        var items = await _service.GetAllAsync(CurrentUserId, IsAdmin, ct);
-        return Ok(ApiResponse<IReadOnlyList<MapPointResponseDto>>.Ok(items, HttpContext.TraceIdentifier));
+        MapPointBBoxDto? bbox = null;
+        var hasAny = minLon.HasValue || minLat.HasValue || maxLon.HasValue || maxLat.HasValue;
+        if (hasAny)
+        {
+            if (!minLon.HasValue || !minLat.HasValue || !maxLon.HasValue || !maxLat.HasValue)
+            {
+                throw new BusinessException(
+                    ErrorCodes.Validation,
+                    "BBox filtresi için minLon, minLat, maxLon ve maxLat birlikte gönderilmelidir.");
+            }
+
+            bbox = new MapPointBBoxDto
+            {
+                MinLongitude = minLon.Value,
+                MinLatitude = minLat.Value,
+                MaxLongitude = maxLon.Value,
+                MaxLatitude = maxLat.Value,
+            };
+
+            var validation = await _bboxValidator.ValidateAsync(bbox, ct);
+            if (!validation.IsValid)
+            {
+                throw new ValidationException(validation.Errors);
+            }
+        }
+
+        if (limit is < 1)
+            throw new BusinessException(ErrorCodes.Validation, "limit en az 1 olmalıdır.");
+
+        var result = await _service.ListAsync(CurrentUserId, IsAdmin, bbox, limit, ct);
+        return Ok(ApiResponse<MapPointListResultDto>.Ok(result, HttpContext.TraceIdentifier));
     }
 
     [HttpGet("{id:guid}")]
@@ -63,6 +105,17 @@ public class MapPointsController : ControllerBase
         if (updated is null)
             return NotFound(ApiResponse<MapPointResponseDto>.Fail(ErrorCodes.NotFound, $"Güncellenecek nokta yok: {id}", HttpContext.TraceIdentifier));
         return Ok(ApiResponse<MapPointResponseDto>.Ok(updated, HttpContext.TraceIdentifier));
+    }
+
+    [HttpPost("import")]
+    [Authorize(Roles = "Admin,User")]
+    [ProducesResponseType(typeof(ApiResponse<MapPointImportResultDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<ApiResponse<MapPointImportResultDto>>> Import(
+        [FromBody] MapPointImportRequestDto dto,
+        CancellationToken ct)
+    {
+        var result = await _service.ImportAsync(dto, CurrentUserId, ct);
+        return Ok(ApiResponse<MapPointImportResultDto>.Ok(result, HttpContext.TraceIdentifier));
     }
 
     [HttpDelete("{id:guid}")]

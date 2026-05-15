@@ -107,6 +107,39 @@ public class AuthService : IAuthService
         return await IssueTokensAsync(user, cancellationToken);
     }
 
+    public async Task<UserProfileDto> GetMeAsync(Guid userId, CancellationToken cancellationToken = default)
+    {
+        var user = await _userManager.FindByIdAsync(userId.ToString());
+        if (user is null)
+            throw new UnauthorizedBusinessException("Oturum geçersiz.");
+
+        var roles = await _userManager.GetRolesAsync(user);
+        return new UserProfileDto
+        {
+            Id = user.Id,
+            UserName = user.UserName ?? string.Empty,
+            DisplayName = user.DisplayName,
+            Roles = roles.ToList(),
+        };
+    }
+
+    public async Task LogoutAsync(Guid userId, string? refreshToken, CancellationToken cancellationToken = default)
+    {
+        if (!string.IsNullOrWhiteSpace(refreshToken))
+        {
+            var stored = await _refreshTokens.GetByTokenAsync(refreshToken, cancellationToken);
+            if (stored is not null && stored.UserId == userId && stored.IsActive)
+                await _refreshTokens.RevokeAsync(stored, cancellationToken: cancellationToken);
+        }
+        else
+        {
+            await _refreshTokens.RevokeAllActiveForUserAsync(userId, cancellationToken);
+        }
+
+        await _refreshTokens.SaveChangesAsync(cancellationToken);
+        _logger.LogInformation("Çıkış: {UserId}", userId);
+    }
+
     private async Task EnsureUserNameAvailableAsync(string userName, CancellationToken cancellationToken)
     {
         var existing = await _userManager.FindByNameAsync(userName);

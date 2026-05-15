@@ -17,11 +17,16 @@ public static class DependencyInjection
     public static IServiceCollection AddDataAccessLayer(
         this IServiceCollection services,
         IConfiguration configuration,
-        string connectionString)
+        string connectionString,
+        bool useInMemoryDatabase = false,
+        string? inMemoryDatabaseName = null)
     {
         services.AddDbContext<AppDbContext>(options =>
         {
-            options.UseNpgsql(connectionString);
+            if (useInMemoryDatabase)
+                options.UseInMemoryDatabase(inMemoryDatabaseName ?? "BasarsoftTestDb");
+            else
+                options.UseNpgsql(connectionString);
         });
 
         services.AddIdentity<ApplicationUser, IdentityRole<Guid>>(options =>

@@ -13,6 +13,7 @@ public static class DependencyInjection
         services.AddValidatorsFromAssemblyContaining<Validators.MapPointCreateDtoValidator>();
 
         services.AddScoped<ICoordinateTransformationService, CoordinateTransformationService>();
+        services.AddScoped<IGeoGeometryParser, GeoGeometryParser>();
         services.AddScoped<IMapPointService, MapPointService>();
         services.AddScoped<ITokenService, TokenService>();
         services.AddScoped<IAuthService, AuthService>();

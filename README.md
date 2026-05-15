@@ -15,6 +15,7 @@ OpenLayers tabanlı bir web harita uygulaması. Kullanıcılar harita üzerine n
 - [Backend Mimarisi](#backend-mimarisi)
 - [Klasör Yapısı](#klasör-yapısı)
 - [Kurulum](#kurulum)
+  - [Unit / integration testleri (çalıştırma)](#unit--integration-testleri-çalıştırma)
 - [Kimlik Doğrulama (JWT)](#kimlik-doğrulama-jwt)
 - [REST API](#rest-api)
 - [Konfigürasyon](#konfigürasyon)
@@ -224,12 +225,92 @@ dotnet run
 
 ### Unit / integration testleri çalıştırma
 
-PostgreSQL gerekmez; `ASPNETCORE_ENVIRONMENT=Testing` ile API **EF InMemory** kullanır (migration/seed atlanır, factory içinde `EnsureCreated` + seed).
+Otomatik **xUnit** testleri (`backend/BasarsoftOdev.Tests`). Haritada deneme için kullanılan **SQL seed** verileri (`PERF-*`, `BASAR-*`) ile karıştırmayın — onlar [Performans test verisi](#performans-test-verisi-sql-opsiyonel) ve [BAŞARSOFT demo](#başarsoft-demo-verisi-sql-opsiyonel) bölümlerindedir.
+
+#### Önkoşullar
+
+| Gereksinim | Not |
+|------------|-----|
+| **.NET 9 SDK** | `dotnet --version` → `9.x` |
+| Proje kökü | `BasarsoftMapApp.sln` olan dizin |
+| PostgreSQL | **Gerekmez** — testler InMemory DB kullanır |
+| API çalışıyor olması | **Gerekmez** — testler kendi `WebApplicationFactory` ile API’yi ayağa kaldırır |
+
+İlk çalıştırmada paketler indirilir; gerekirse önce:
+
+```powershell
+dotnet restore BasarsoftMapApp.sln
+```
+
+#### Tüm testleri çalıştırma
+
+Proje kökünde (PowerShell veya terminal):
+
+```powershell
+cd <PROJE_KOK_YOLU>
+dotnet test backend/BasarsoftOdev.Tests/BasarsoftOdev.Tests.csproj
+```
+
+Örnek (Windows):
 
 ```powershell
 cd D:\Basarsoft\basar_ise_giris_case\basar_odev
 dotnet test backend/BasarsoftOdev.Tests/BasarsoftOdev.Tests.csproj
 ```
+
+#### Beklenen sonuç
+
+Başarılı çalıştırmada özet satırı şöyledir:
+
+```text
+Başarılı!  - Başarısız: 0, Başarılı: 16, Atlanan: 0, Toplam: 16
+```
+
+| Tür | Adet | Açıklama |
+|-----|------|----------|
+| Unit | 10 | Servis, validator, koordinat dönüşümü (mock / izole) |
+| Integration | 6 | Gerçek HTTP pipeline (`login`, `/me`, MapPoints 401/CRUD+bbox) |
+
+Integration testler seed kullanıcısı ile giriş yapar: **`admin` / `admin`**.
+
+#### Seçici çalıştırma
+
+```powershell
+# Yalnızca unit testler
+dotnet test backend/BasarsoftOdev.Tests/BasarsoftOdev.Tests.csproj --filter "FullyQualifiedName~Unit"
+
+# Yalnızca integration testler
+dotnet test backend/BasarsoftOdev.Tests/BasarsoftOdev.Tests.csproj --filter "FullyQualifiedName~Integration"
+
+# Tek sınıf
+dotnet test backend/BasarsoftOdev.Tests/BasarsoftOdev.Tests.csproj --filter "FullyQualifiedName~AuthApiTests"
+
+# Geçen testleri satır satır görmek
+dotnet test backend/BasarsoftOdev.Tests/BasarsoftOdev.Tests.csproj --verbosity normal
+```
+
+#### IDE ile çalıştırma
+
+| Ortam | Yol |
+|-------|-----|
+| **Visual Studio** | Test Explorer → `BasarsoftOdev.Tests` → *Run All* |
+| **VS Code** | C# Dev Kit veya .NET Test Explorer → test ağacından çalıştır |
+| **JetBrains Rider** | *Unit Tests* penceresi → projeyi seç → Run |
+
+IDE de aynı test projesini kullanır; ek PostgreSQL veya çalışan API gerekmez.
+
+#### Sorun giderme
+
+| Belirti | Çözüm |
+|---------|--------|
+| Derleme / dosya kilidi | `BasarsoftOdev.Api` çalışıyorsa kapatın: `Get-Process -Name BasarsoftOdev.Api -ErrorAction SilentlyContinue \| Stop-Process -Force` |
+| Paket / proje bulunamadı | Proje kökünden `dotnet restore BasarsoftMapApp.sln` |
+| Test projesi solution’da yok | `dotnet sln BasarsoftMapApp.sln add backend/BasarsoftOdev.Tests/BasarsoftOdev.Tests.csproj` |
+| Integration login hatası | Seed şifresi `admin` (README’deki `Admin123!` değil) |
+
+**Ortam:** `ASPNETCORE_ENVIRONMENT=Testing` → migration atlanır; `CustomWebApplicationFactory` InMemory veritabanı oluşturur (`EnsureCreated` + seed). Ayrıntılı mimari: [Opsiyonel — madde 8](#8-unit--integration-test-tamamlandı).
+
+#### Test dosyaları
 
 | Tür | Dosya | Kapsam |
 |-----|--------|--------|
@@ -239,7 +320,7 @@ dotnet test backend/BasarsoftOdev.Tests/BasarsoftOdev.Tests.csproj
 | Integration | `Integration/AuthApiTests.cs` | `POST /api/auth/login`, `GET /api/auth/me` |
 | Integration | `Integration/MapPointsApiTests.cs` | Yetkisiz 401, oluştur + bbox listele |
 
-Ayrıntı: [Opsiyonel — madde 8](#8-unit--integration-test-tamamlandı).
+---
 
 **Opsiyonel SQL test verileri (10.000 nokta):** Temel kurulumdan sonra — aşağıdaki hızlı referans veya ayrıntılı bölümler. Uygulama için zorunlu değildir.
 
@@ -918,7 +999,7 @@ Case dokümanındaki opsiyonel maddeler ve projedeki karşılıkları.
 
 **Integration testler** — gerçek HTTP pipeline; `ApiResponse<T>` sarmalayıcı ve HTTP durum kodları doğrulanır (ör. nokta oluşturma `201 Created`).
 
-Tüm testleri çalıştırma: [Kurulum — testler](#unit--integration-testleri-çalıştırma).
+Çalıştırma rehberi (komutlar, beklenen çıktı, sorun giderme): [Kurulum — Unit / integration testleri](#unit--integration-testleri-çalıştırma).
 
 ---
 

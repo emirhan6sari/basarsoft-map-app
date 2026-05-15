@@ -32,6 +32,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<Guid
             entity.Property(p => p.Description).HasMaxLength(2000);
             entity.Property(p => p.Category).IsRequired().HasMaxLength(32);
             entity.HasIndex(p => new { p.XMercator, p.YMercator });
+            entity.HasIndex(p => new { p.Longitude, p.Latitude });
             entity.Property(p => p.CreatedAt).HasColumnType("timestamptz").IsRequired();
             entity.Property(p => p.IsDeleted).HasDefaultValue(false);
             entity.Property(p => p.DeletedAt).HasColumnType("timestamptz");

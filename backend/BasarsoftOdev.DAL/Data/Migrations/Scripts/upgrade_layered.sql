@@ -30,6 +30,7 @@ ALTER TABLE map_points ADD COLUMN IF NOT EXISTS "DeletedAt" timestamptz NULL;
 ALTER TABLE map_points ADD COLUMN IF NOT EXISTS "DeletedByUserId" uuid NULL;
 CREATE INDEX IF NOT EXISTS "IX_map_points_IsDeleted" ON map_points ("IsDeleted");
 CREATE INDEX IF NOT EXISTS "IX_map_points_XMercator_YMercator" ON map_points ("XMercator", "YMercator");
+CREATE INDEX IF NOT EXISTS "IX_map_points_Longitude_Latitude" ON map_points ("Longitude", "Latitude");
 
 COMMENT ON COLUMN map_points."Longitude" IS 'EPSG:4326 — boylam (derece, WGS84)';
 COMMENT ON COLUMN map_points."Latitude" IS 'EPSG:4326 — enlem (derece, WGS84)';

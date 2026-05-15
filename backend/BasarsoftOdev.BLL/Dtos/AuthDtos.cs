@@ -28,3 +28,16 @@ public class AuthResponseDto
     public string UserName { get; set; } = string.Empty;
     public string? DisplayName { get; set; }
 }
+
+public class UserProfileDto
+{
+    public Guid Id { get; set; }
+    public string UserName { get; set; } = string.Empty;
+    public string? DisplayName { get; set; }
+    public IReadOnlyList<string> Roles { get; set; } = Array.Empty<string>();
+}
+
+public class LogoutRequestDto
+{
+    public string? RefreshToken { get; set; }
+}

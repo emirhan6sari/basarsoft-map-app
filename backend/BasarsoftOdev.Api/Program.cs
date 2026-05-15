@@ -22,12 +22,16 @@ try
     builder.Host.UseSerilog();
 
     var connectionString = ResolveConnectionString(builder.Configuration);
-    builder.Services.AddApiServices(builder.Configuration, connectionString);
+    var useInMemoryDb = builder.Environment.IsEnvironment("Testing");
+    builder.Services.AddApiServices(
+        builder.Configuration,
+        connectionString,
+        useInMemoryDatabase: useInMemoryDb,
+        inMemoryDatabaseName: useInMemoryDb ? "BasarsoftIntegrationTests" : null);
 
     var app = builder.Build();
 
     app.UseMiddleware<ExceptionHandlingMiddleware>();
-    app.UseMiddleware<RequestLoggingMiddleware>();
 
     if (app.Environment.IsDevelopment())
     {
@@ -45,6 +49,8 @@ try
     app.UseCors(ServiceCollectionExtensions.FrontendCorsPolicy);
     app.UseAuthentication();
     app.UseAuthorization();
+    app.UseMiddleware<LoggingScopeMiddleware>();
+    app.UseMiddleware<RequestLoggingMiddleware>();
     app.MapControllers();
 
     app.MapGet("/", () => Results.Ok(new { name = "Başarsoft Map API", status = "running", docs = "/swagger" }));
@@ -55,8 +61,12 @@ try
         return ok ? Results.Ok(new { connected = true }) : Results.Problem(statusCode: 503);
     }).AllowAnonymous();
 
-    await app.ApplyMigrationsAsync();
-    await app.SeedDatabaseAsync();
+    if (!app.Environment.IsEnvironment("Testing"))
+    {
+        await app.ApplyMigrationsAsync();
+        await app.SeedDatabaseAsync();
+    }
+
     app.Run();
 }
 catch (Exception ex)
@@ -86,3 +96,6 @@ static string ResolveConnectionString(IConfiguration configuration)
 
     throw new InvalidOperationException("Connection string bulunamadı.");
 }
+
+/// <summary>WebApplicationFactory (integration test) için.</summary>
+public partial class Program;

@@ -1,4 +1,5 @@
 using System.Text;
+using BasarsoftOdev.Api.Options;
 using BasarsoftOdev.BLL;
 using BasarsoftOdev.BLL.Options;
 using BasarsoftOdev.DAL;
@@ -13,11 +14,17 @@ public static class ServiceCollectionExtensions
 {
     public const string FrontendCorsPolicy = "FrontendCorsPolicy";
 
-    public static IServiceCollection AddApiServices(this IServiceCollection services, IConfiguration configuration, string connectionString)
+    public static IServiceCollection AddApiServices(
+        this IServiceCollection services,
+        IConfiguration configuration,
+        string connectionString,
+        bool useInMemoryDatabase = false,
+        string? inMemoryDatabaseName = null)
     {
         services.AddBusinessOptions(configuration);
+        services.Configure<LoggingSettings>(configuration.GetSection(LoggingSettings.SectionName));
         services.AddBusinessLayer();
-        services.AddDataAccessLayer(configuration, connectionString);
+        services.AddDataAccessLayer(configuration, connectionString, useInMemoryDatabase, inMemoryDatabaseName);
 
         services.AddControllers()
             .AddJsonOptions(opts =>

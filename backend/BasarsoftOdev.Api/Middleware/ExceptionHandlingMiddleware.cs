@@ -1,8 +1,10 @@
 using System.Net;
+using System.Security.Claims;
 using System.Text.Json;
 using BasarsoftOdev.BLL.Common;
 using BasarsoftOdev.BLL.Exceptions;
 using FluentValidation;
+using Serilog.Context;
 
 namespace BasarsoftOdev.Api.Middleware;
 
@@ -34,10 +36,22 @@ public class ExceptionHandlingMiddleware
         var traceId = context.TraceIdentifier;
         var (status, response) = MapException(ex, traceId);
 
-        if (status >= 500)
-            _logger.LogError(ex, "İşlenmeyen hata. TraceId={TraceId}", traceId);
-        else
-            _logger.LogWarning(ex, "İş kuralı/validasyon hatası. TraceId={TraceId}", traceId);
+        var userId = context.User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? context.User.FindFirstValue("sub")
+            ?? "anonymous";
+        var userName = context.User.Identity?.Name
+            ?? context.User.FindFirstValue(ClaimTypes.Name)
+            ?? "anonymous";
+
+        using (LogContext.PushProperty("TraceId", traceId))
+        using (LogContext.PushProperty("UserId", userId))
+        using (LogContext.PushProperty("UserName", userName))
+        {
+            if (status >= 500)
+                _logger.LogError(ex, "İşlenmeyen hata");
+            else
+                _logger.LogWarning(ex, "İş kuralı/validasyon hatası: {ErrorType}", ex.GetType().Name);
+        }
 
         context.Response.ContentType = "application/json";
         context.Response.StatusCode = status;
