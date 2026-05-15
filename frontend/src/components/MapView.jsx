@@ -1,18 +1,8 @@
 // ============================================================================
-// MapView — OpenLayers haritasını barındıran konteyner bileşeni
-// ----------------------------------------------------------------------------
-// Sorumluluğu:
-//   1) Haritanın render edileceği <div>'i sağlar
-//   2) Mouse pointermove → CoordinateBox (alt orta)
-//   3) Katman yönetimi → LayersPanel (sol alt)
-//   4) "Noktalar" VectorLayer — backend'den çekilen noktaları gösterir
-//   5) addPoint modu — haritaya tıklanınca:
-//        a) Yakın mesafede (<= PROXIMITY_THRESHOLD_M) nokta varsa uyarı göster
-//        b) Kullanıcı onaylarsa / yakın nokta yoksa AddPointModal aç
-//        c) Başarılı kayıt → haritaya ekle
+// MapView — OpenLayers haritası, cluster + kategori stilleri + mekansal sorgu
 // ============================================================================
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Box,
   Alert,
@@ -26,51 +16,76 @@ import {
 
 import VectorLayer from 'ol/layer/Vector';
 import VectorSource from 'ol/source/Vector';
+import Cluster from 'ol/source/Cluster';
 import Feature from 'ol/Feature';
-import { Point as OlPoint } from 'ol/geom';
+import { Point as OlPoint, Circle as OlCircle, Polygon as OlPolygon } from 'ol/geom';
 import { fromLonLat, toLonLat } from 'ol/proj';
-import { Style, Circle as CircleStyle, Fill, Stroke } from 'ol/style';
+import Draw from 'ol/interaction/Draw';
+import DragBox from 'ol/interaction/DragBox';
 
 import { useOpenLayersMap } from '../hooks/useOpenLayersMap';
 import CoordinateBox from './CoordinateBox';
 import LayersPanel from './LayersPanel';
 import AddPointModal from './AddPointModal';
+import QueryPointsModal from './QueryPointsModal';
+import PointDetailPopup from './PointDetailPopup';
+import CategoryLegend from './CategoryLegend';
+import SpatialQueryToolbar from './SpatialQueryToolbar';
+import BufferDistanceDialog from './BufferDistanceDialog';
 import { listMapPoints } from '../api/mapPoints';
+import { fetchCategories } from '../api/categories';
+import { isAuthenticated } from '../api/auth';
+import {
+  CLUSTER_OPTIONS,
+  HIGHLIGHT_STYLE,
+  SPATIAL_QUERY_STYLE,
+  createClusterStyleFunction,
+  registerCategories,
+} from '../utils/mapPointStyles';
+import {
+  filterPointsInBuffer,
+  filterPointsInExtent,
+  filterPointsInPolygon,
+  extentToPolygonCoords,
+} from '../utils/spatialQuery';
+import { coordinateSetFrom3857 } from '../utils/coordinateTransform';
+import { setupAuxiliaryLayers } from '../layers/setupAuxiliaryLayers';
 
-// -----------------------------------------------------------------------
-// Yakın nokta eşiği: 50 metre (EPSG:3857 metre cinsindendir).
-// OpenLayers'ın map.getView().getProjection() default'u EPSG:3857 (metre).
-// -----------------------------------------------------------------------
 const PROXIMITY_THRESHOLD_M = 50;
 
-const POINT_STYLE = new Style({
-  image: new CircleStyle({
-    radius: 7,
-    fill: new Fill({ color: '#e53935' }),
-    stroke: new Stroke({ color: '#ffffff', width: 2 }),
-  }),
-});
+const SPATIAL_HINTS = {
+  spatialBuffer: 'Buffer merkezi için haritaya tıklayın • İptal: Esc',
+  spatialBox: 'Dikdörtgen alan çizmek için sürükleyin • İptal: Esc',
+  spatialPolygon: 'Poligon çizmek için tıklayın; bitirmek için çift tıklayın • İptal: Esc',
+};
+
+function isEditableTarget(target) {
+  if (!target || !(target instanceof HTMLElement)) return false;
+  const tag = target.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+  return target.isContentEditable;
+}
+
+function hasActiveDrawSketch(draw) {
+  if (!draw) return false;
+  const sketchSource = draw.getOverlay()?.getSource();
+  return (sketchSource?.getFeatures().length ?? 0) > 0;
+}
 
 /** MapPointResponseDto → OpenLayers Feature */
 function dtoToFeature(dto) {
   const feature = new Feature({
     geometry: new OlPoint(fromLonLat([dto.longitude, dto.latitude])),
-    pointData: dto, // tüm veriyi feature üzerinde taşı (ileride popup için kullanışlı)
+    pointData: dto,
   });
   feature.setId(dto.id);
   return feature;
 }
 
-/**
- * Tıklama noktasına en yakın mevcut noktanın adını döner; eşik aşılmıyorsa null.
- * @param {import('ol/source/Vector').default} source
- * @param {number[]} clickCoord3857  [x, y] EPSG:3857
- * @returns {{ name: string, distanceM: number } | null}
- */
-function findNearbyPoint(source, clickCoord3857) {
+function findNearbyPoint(vectorSource, clickCoord3857) {
   let closest = null;
 
-  source.getFeatures().forEach((feature) => {
+  vectorSource.getFeatures().forEach((feature) => {
     const geom = feature.getGeometry();
     if (!geom) return;
     const [fx, fy] = geom.getCoordinates();
@@ -91,69 +106,448 @@ function findNearbyPoint(source, clickCoord3857) {
   return closest;
 }
 
-/**
- * @param {{ activeMode: string|null, onModeConsumed: () => void }} props
- */
 function MapView({ activeMode, onModeConsumed }) {
   const mapContainerRef = useRef(null);
-  const { map }         = useOpenLayersMap(mapContainerRef);
+  const { map } = useOpenLayersMap(mapContainerRef);
 
-  const [lonLat, setLonLat]               = useState(null);
-  const pointsSourceRef                   = useRef(null);
+  const [pointerCoord, setPointerCoord] = useState(null);
+  const [clickCoord, setClickCoord] = useState(null);
+  const [loggedIn, setLoggedIn] = useState(() => isAuthenticated());
+  const [categories, setCategories] = useState([]);
 
-  // AddPointModal
-  const [modalOpen, setModalOpen]         = useState(false);
-  const [pendingCoord, setPendingCoord]   = useState(null);
+  const vectorSourceRef = useRef(null);
+  const highlightSourceRef = useRef(null);
+  const querySourceRef = useRef(null);
+  const pointsDataRef = useRef([]);
+  const drawInteractionRef = useRef(null);
 
-  // Yakın nokta uyarı dialog'u
-  const [warnOpen, setWarnOpen]           = useState(false);
-  const [warnText, setWarnText]           = useState('');
-  // Kullanıcı "yine de ekle" derse modal'ı açmak için koordinatı saklarız
-  const pendingAfterWarnRef               = useRef(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [pendingCoord, setPendingCoord] = useState(null);
+  const [queryOpen, setQueryOpen] = useState(false);
+  const [spatialResults, setSpatialResults] = useState(null);
+  const [spatialResultsTitle, setSpatialResultsTitle] = useState('Nokta Sorgulama');
+  const [spatialResultsHint, setSpatialResultsHint] = useState(null);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [selectedPoint, setSelectedPoint] = useState(null);
+  const [warnOpen, setWarnOpen] = useState(false);
+  const [warnText, setWarnText] = useState('');
+  const pendingAfterWarnRef = useRef(null);
+
+  const [layersPanelOpen, setLayersPanelOpen] = useState(false);
+  const [spatialOpen, setSpatialOpen] = useState(false);
+  const [spatialMode, setSpatialMode] = useState(null);
+  const [bufferDialogOpen, setBufferDialogOpen] = useState(false);
+  const [bufferCenter, setBufferCenter] = useState(null);
+  const [bufferCenterLabel, setBufferCenterLabel] = useState('');
+
+  const clearQueryLayer = useCallback(() => {
+    querySourceRef.current?.clear();
+  }, []);
+
+  const highlightMultiple = useCallback((dtos) => {
+    const hl = highlightSourceRef.current;
+    if (!hl) return;
+    hl.clear();
+    dtos.forEach((dto) => {
+      hl.addFeature(new Feature({
+        geometry: new OlPoint(fromLonLat([dto.longitude, dto.latitude])),
+      }));
+    });
+  }, []);
+
+  const openSpatialResults = useCallback((points, title, hint) => {
+    setSpatialResults(points);
+    setSpatialResultsTitle(title);
+    setSpatialResultsHint(hint);
+    setQueryOpen(true);
+  }, []);
+
+  const handleSpatialClose = useCallback(() => {
+    setSpatialOpen(false);
+    setSpatialMode(null);
+    setBufferDialogOpen(false);
+    setBufferCenter(null);
+    clearQueryLayer();
+    highlightSourceRef.current?.clear();
+  }, [clearQueryLayer]);
+
+  const handleSpatialToolSelect = useCallback((mode) => {
+    clearQueryLayer();
+    highlightSourceRef.current?.clear();
+    setSpatialMode(mode);
+    setBufferDialogOpen(false);
+    setBufferCenter(null);
+  }, [clearQueryLayer]);
+
+  const cancelSpatialTool = useCallback(() => {
+    setSpatialMode(null);
+    setBufferDialogOpen(false);
+    setBufferCenter(null);
+    clearQueryLayer();
+    highlightSourceRef.current?.clear();
+  }, [clearQueryLayer]);
+
+  const cancelCurrentOperation = useCallback(() => {
+    if (bufferDialogOpen) {
+      setBufferDialogOpen(false);
+      setBufferCenter(null);
+      return true;
+    }
+    if (modalOpen) {
+      setModalOpen(false);
+      setPendingCoord(null);
+      return true;
+    }
+    if (warnOpen) {
+      setWarnOpen(false);
+      pendingAfterWarnRef.current = null;
+      return true;
+    }
+    if (queryOpen) {
+      setQueryOpen(false);
+      setSpatialResults(null);
+      setSpatialResultsTitle('Nokta Sorgulama');
+      setSpatialResultsHint(null);
+      return true;
+    }
+    if (detailOpen) {
+      setDetailOpen(false);
+      setSelectedPoint(null);
+      return true;
+    }
+    if (spatialMode === 'spatialPolygon' && drawInteractionRef.current) {
+      const draw = drawInteractionRef.current;
+      if (hasActiveDrawSketch(draw)) {
+        draw.abortDrawing();
+        return true;
+      }
+    }
+    if (spatialMode) {
+      cancelSpatialTool();
+      return true;
+    }
+    if (spatialOpen) {
+      handleSpatialClose();
+      return true;
+    }
+    if (activeMode === 'addPoint') {
+      onModeConsumed?.();
+      return true;
+    }
+    return false;
+  }, [
+    bufferDialogOpen,
+    modalOpen,
+    warnOpen,
+    queryOpen,
+    detailOpen,
+    spatialMode,
+    spatialOpen,
+    activeMode,
+    cancelSpatialTool,
+    handleSpatialClose,
+    onModeConsumed,
+  ]);
 
   // -------------------------------------------------------------------
-  // 1) Haritaya "Noktalar" VectorLayer ekle + backend'den yükle
+  // Esc — anlık işlemi iptal
+  // -------------------------------------------------------------------
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (e.key !== 'Escape') return;
+      if (isEditableTarget(e.target)) return;
+      if (cancelCurrentOperation()) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, [cancelCurrentOperation]);
+
+  // -------------------------------------------------------------------
+  // Yardımcı GeoJSON katmanları (il / ilçe / örnek polygon)
+  // -------------------------------------------------------------------
+  useEffect(() => {
+    if (!map) return;
+    const auxLayers = setupAuxiliaryLayers(map);
+    return () => auxLayers.forEach((layer) => map.removeLayer(layer));
+  }, [map]);
+
+  // -------------------------------------------------------------------
+  // Noktalar + vurgulama + mekansal sorgu geometri katmanları
   // -------------------------------------------------------------------
   useEffect(() => {
     if (!map) return;
 
-    const source = new VectorSource();
-    pointsSourceRef.current = source;
+    const vectorSource = new VectorSource();
+    vectorSourceRef.current = vectorSource;
 
-    const layer = new VectorLayer({ source, style: POINT_STYLE });
-    layer.set('title', 'Noktalar');
-    map.addLayer(layer);
+    const clusterSource = new Cluster({
+      ...CLUSTER_OPTIONS,
+      source: vectorSource,
+    });
+
+    const pointsLayer = new VectorLayer({
+      source: clusterSource,
+      style: createClusterStyleFunction(),
+      zIndex: 6,
+    });
+    pointsLayer.set('title', 'Noktalar');
+    map.addLayer(pointsLayer);
+
+    const hlSource = new VectorSource();
+    highlightSourceRef.current = hlSource;
+    const hlLayer = new VectorLayer({
+      source: hlSource,
+      style: HIGHLIGHT_STYLE,
+      zIndex: 10,
+    });
+    hlLayer.set('title', 'Vurgulama');
+    map.addLayer(hlLayer);
+
+    const querySource = new VectorSource();
+    querySourceRef.current = querySource;
+    const queryLayer = new VectorLayer({
+      source: querySource,
+      style: SPATIAL_QUERY_STYLE,
+      zIndex: 5,
+    });
+    queryLayer.set('title', 'Mekansal Sorgu');
+    map.addLayer(queryLayer);
 
     let cancelled = false;
-    listMapPoints()
-      .then((dtos) => {
-        if (cancelled) return;
-        source.addFeatures(dtos.map(dtoToFeature));
-      })
-      .catch((err) => console.error('Noktalar yüklenemedi:', err));
+    const authenticated = isAuthenticated();
+    setLoggedIn(authenticated);
+
+    if (authenticated) {
+      Promise.all([listMapPoints(), fetchCategories()])
+        .then(([dtos, cats]) => {
+          if (cancelled) return;
+          const list = dtos ?? [];
+          pointsDataRef.current = list;
+          const categoryList = cats ?? [];
+          registerCategories(categoryList);
+          setCategories(categoryList);
+          vectorSource.addFeatures(list.map(dtoToFeature));
+          map.getLayers().getArray()
+            .find((l) => l.get('title') === 'Noktalar')
+            ?.changed();
+        })
+        .catch((err) => console.error('Harita verisi yüklenemedi:', err));
+    } else {
+      pointsDataRef.current = [];
+    }
 
     return () => {
       cancelled = true;
-      map.removeLayer(layer);
-      pointsSourceRef.current = null;
+      map.removeLayer(pointsLayer);
+      map.removeLayer(hlLayer);
+      map.removeLayer(queryLayer);
+      vectorSourceRef.current = null;
+      highlightSourceRef.current = null;
+      querySourceRef.current = null;
+      pointsDataRef.current = [];
     };
   }, [map]);
 
   // -------------------------------------------------------------------
-  // 2) Mouse koordinatları → CoordinateBox
+  // Fare + tıklama koordinatları (EPSG:4326 ve EPSG:3857)
   // -------------------------------------------------------------------
   useEffect(() => {
     if (!map) return;
     const onMove = (e) => {
+      const [x, y] = e.coordinate;
       const [lon, lat] = toLonLat(e.coordinate);
-      setLonLat({ lon, lat });
+      setPointerCoord({ lon, lat, x, y });
     };
     map.on('pointermove', onMove);
     return () => map.un('pointermove', onMove);
   }, [map]);
 
+  useEffect(() => {
+    if (!map) return;
+    const onClick = (e) => {
+      const [x, y] = e.coordinate;
+      const [lon, lat] = toLonLat(e.coordinate);
+      setClickCoord({ lon, lat, x, y });
+    };
+    map.on('singleclick', onClick);
+    return () => map.un('singleclick', onClick);
+  }, [map]);
+
+  const handlePointSelect = useCallback((dto) => {
+    if (!map || !highlightSourceRef.current) return;
+
+    const center = fromLonLat([dto.longitude, dto.latitude]);
+    highlightSourceRef.current.clear();
+    highlightSourceRef.current.addFeature(new Feature({ geometry: new OlPoint(center) }));
+
+    map.getView().animate({
+      center,
+      zoom: Math.max(map.getView().getZoom() ?? 12, 14),
+      duration: 600,
+    });
+  }, [map]);
+
+  useEffect(() => {
+    if (activeMode === 'queryPoints') {
+      setSpatialResults(null);
+      setSpatialResultsTitle('Nokta Sorgulama');
+      setSpatialResultsHint(null);
+      setQueryOpen(true);
+      onModeConsumed?.();
+    }
+    if (activeMode === 'spatial') {
+      setSpatialOpen(true);
+      onModeConsumed?.();
+    }
+    if (activeMode === 'layers') {
+      setLayersPanelOpen(true);
+      onModeConsumed?.();
+    }
+  }, [activeMode, onModeConsumed]);
+
   // -------------------------------------------------------------------
-  // 3) addPoint modu — tıklamayı yakala
+  // Noktaya tıklama → detay popup
+  // -------------------------------------------------------------------
+  useEffect(() => {
+    if (!map || activeMode === 'addPoint' || spatialMode || !loggedIn) return;
+
+    const onClick = (e) => {
+      const clusterFeature = map.forEachFeatureAtPixel(
+        e.pixel,
+        (f, layer) => (layer.get('title') === 'Noktalar' ? f : undefined),
+        { hitTolerance: 10 },
+      );
+
+      if (!clusterFeature) return;
+
+      const members = clusterFeature.get('features');
+      if (!members?.length) return;
+
+      if (members.length > 1) {
+        map.getView().animate({
+          center: e.coordinate,
+          zoom: (map.getView().getZoom() ?? 10) + 2,
+          duration: 350,
+        });
+        return;
+      }
+
+      const data = members[0].get('pointData');
+      if (!data) return;
+
+      setSelectedPoint(data);
+      setDetailOpen(true);
+      handlePointSelect(data);
+    };
+
+    map.on('singleclick', onClick);
+    return () => map.un('singleclick', onClick);
+  }, [map, activeMode, spatialMode, loggedIn, handlePointSelect]);
+
+  // -------------------------------------------------------------------
+  // Mekansal sorgu etkileşimleri
+  // -------------------------------------------------------------------
+  useEffect(() => {
+    if (!map || !spatialMode || !loggedIn) return;
+
+    const querySource = querySourceRef.current;
+    const points = pointsDataRef.current;
+    const olInteractions = [];
+    const cleanups = [];
+    const viewport = map.getViewport();
+    const prevCursor = viewport.style.cursor;
+    viewport.style.cursor = 'crosshair';
+
+    if (spatialMode === 'spatialBuffer') {
+      const onClick = (e) => {
+        const [lon, lat] = toLonLat(e.coordinate);
+        const center = { longitude: lon, latitude: lat };
+        setBufferCenter(center);
+        setBufferCenterLabel(`${lat.toFixed(5)}°, ${lon.toFixed(5)}°`);
+        setBufferDialogOpen(true);
+      };
+      map.on('singleclick', onClick);
+      cleanups.push(() => map.un('singleclick', onClick));
+    }
+
+    if (spatialMode === 'spatialBox' && querySource) {
+      const dragBox = new DragBox({});
+      map.addInteraction(dragBox);
+      olInteractions.push(dragBox);
+
+      dragBox.on('boxend', () => {
+        const extent = dragBox.getGeometry().getExtent();
+        querySource.clear();
+        querySource.addFeature(new Feature({
+          geometry: new OlPolygon(extentToPolygonCoords(extent)),
+        }));
+        const found = filterPointsInExtent(points, extent);
+        highlightMultiple(found);
+        openSpatialResults(
+          found,
+          'Dikdörtgen Alan Sorgusu',
+          `${found.length} nokta seçilen alan içinde`,
+        );
+      });
+    }
+
+    if (spatialMode === 'spatialPolygon' && querySource) {
+      const draw = new Draw({ source: querySource, type: 'Polygon' });
+      drawInteractionRef.current = draw;
+      map.addInteraction(draw);
+      olInteractions.push(draw);
+
+      draw.on('drawend', (evt) => {
+        const coords = evt.feature.getGeometry().getCoordinates();
+        const found = filterPointsInPolygon(points, coords);
+        highlightMultiple(found);
+        openSpatialResults(
+          found,
+          'Poligon Sorgusu',
+          `${found.length} nokta poligon içinde — haritada vurgulandı`,
+        );
+      });
+    }
+
+    return () => {
+      drawInteractionRef.current = null;
+      viewport.style.cursor = prevCursor;
+      olInteractions.forEach((i) => map.removeInteraction(i));
+      cleanups.forEach((fn) => fn());
+    };
+  }, [map, spatialMode, loggedIn, highlightMultiple, openSpatialResults]);
+
+  const handleBufferConfirm = (radiusM) => {
+    setBufferDialogOpen(false);
+    if (!bufferCenter || !querySourceRef.current) return;
+
+    const center3857 = fromLonLat([bufferCenter.longitude, bufferCenter.latitude]);
+    querySourceRef.current.clear();
+    querySourceRef.current.addFeature(new Feature({
+      geometry: new OlCircle(center3857, radiusM),
+    }));
+
+    const points = pointsDataRef.current;
+    const found = filterPointsInBuffer(points, bufferCenter, radiusM);
+    highlightMultiple(found);
+    openSpatialResults(
+      found,
+      'Buffer Sorgusu',
+      `${found.length} nokta — ${radiusM} m yarıçap`,
+    );
+    setBufferCenter(null);
+  };
+
+  const handleBufferCancel = () => {
+    setBufferDialogOpen(false);
+    setBufferCenter(null);
+  };
+
+  // -------------------------------------------------------------------
+  // addPoint modu
   // -------------------------------------------------------------------
   useEffect(() => {
     if (!map || activeMode !== 'addPoint') return;
@@ -163,22 +557,19 @@ function MapView({ activeMode, onModeConsumed }) {
     viewport.style.cursor = 'crosshair';
 
     const onClick = (e) => {
-      // e.coordinate EPSG:3857 cinsinden
-      const coord3857 = e.coordinate;
-      const [lon, lat] = toLonLat(coord3857);
-      const coord4326  = { longitude: lon, latitude: lat };
+      if (e.originalEvent?.defaultPrevented) return;
+      const [xMercator, yMercator] = e.coordinate;
+      const coord4326 = coordinateSetFrom3857(xMercator, yMercator);
 
-      // Yakın nokta kontrolü
-      const nearby = pointsSourceRef.current
-        ? findNearbyPoint(pointsSourceRef.current, coord3857)
+      const nearby = vectorSourceRef.current
+        ? findNearbyPoint(vectorSourceRef.current, e.coordinate)
         : null;
 
       if (nearby) {
-        // Uyarı dialog'unu göster; kullanıcı onaylarsa modal açılacak
         pendingAfterWarnRef.current = coord4326;
         setWarnText(
           `"${nearby.name}" noktasına yaklaşık ${nearby.distanceM} m uzaklıkta ` +
-          `zaten bir nokta var. Yine de yeni nokta eklemek istiyor musunuz?`
+          `zaten bir nokta var. Yine de yeni nokta eklemek istiyor musunuz?`,
         );
         setWarnOpen(true);
       } else {
@@ -187,16 +578,13 @@ function MapView({ activeMode, onModeConsumed }) {
       }
     };
 
-    map.on('click', onClick);
+    map.on('singleclick', onClick);
     return () => {
-      map.un('click', onClick);
+      map.un('singleclick', onClick);
       viewport.style.cursor = prevCursor;
     };
   }, [map, activeMode]);
 
-  // -------------------------------------------------------------------
-  // Uyarı dialog'u: "Yine de Ekle" → modal aç
-  // -------------------------------------------------------------------
   const handleWarnConfirm = () => {
     setWarnOpen(false);
     setPendingCoord(pendingAfterWarnRef.current);
@@ -209,11 +597,9 @@ function MapView({ activeMode, onModeConsumed }) {
     pendingAfterWarnRef.current = null;
   };
 
-  // -------------------------------------------------------------------
-  // Modal kaydedildi
-  // -------------------------------------------------------------------
   const handleCreated = (dto) => {
-    pointsSourceRef.current?.addFeature(dtoToFeature(dto));
+    vectorSourceRef.current?.addFeature(dtoToFeature(dto));
+    pointsDataRef.current = [...pointsDataRef.current, dto];
     onModeConsumed?.();
   };
 
@@ -222,14 +608,85 @@ function MapView({ activeMode, onModeConsumed }) {
     setPendingCoord(null);
   };
 
+  const upsertPointOnMap = (dto) => {
+    const source = vectorSourceRef.current;
+    if (!source) return;
+    const existing = source.getFeatureById(dto.id);
+    if (existing) source.removeFeature(existing);
+    source.addFeature(dtoToFeature(dto));
+    const idx = pointsDataRef.current.findIndex((p) => p.id === dto.id);
+    if (idx >= 0) {
+      pointsDataRef.current = [
+        ...pointsDataRef.current.slice(0, idx),
+        dto,
+        ...pointsDataRef.current.slice(idx + 1),
+      ];
+    } else {
+      pointsDataRef.current = [...pointsDataRef.current, dto];
+    }
+    map?.getLayers().getArray().find((l) => l.get('title') === 'Noktalar')?.changed();
+  };
+
+  const handlePointUpdated = (dto) => {
+    upsertPointOnMap(dto);
+    setSelectedPoint(dto);
+    handlePointSelect(dto);
+  };
+
+  const handlePointDeleted = (id) => {
+    const source = vectorSourceRef.current;
+    const existing = source?.getFeatureById(id);
+    if (existing) source.removeFeature(existing);
+    pointsDataRef.current = pointsDataRef.current.filter((p) => p.id !== id);
+    highlightSourceRef.current?.clear();
+    setDetailOpen(false);
+    setSelectedPoint(null);
+  };
+
+  const spatialHint = spatialMode ? SPATIAL_HINTS[spatialMode] : null;
+
   return (
     <Box sx={{ position: 'relative', width: '100%', height: '100%' }}>
-      <Box ref={mapContainerRef} sx={{ width: '100%', height: '100%', userSelect: 'none' }} />
+      <Box
+        ref={mapContainerRef}
+        className="map-container"
+        sx={{ width: '100%', height: '100%', minHeight: 0, userSelect: 'none' }}
+      />
 
-      <CoordinateBox lonLat={lonLat} />
-      <LayersPanel map={map} />
+      <CoordinateBox pointerCoord={pointerCoord} clickCoord={clickCoord} />
+      <LayersPanel
+        map={map}
+        open={layersPanelOpen}
+        onOpenChange={setLayersPanelOpen}
+      />
+      <CategoryLegend visible={loggedIn} categories={categories} />
 
-      {/* addPoint modu banner'ı */}
+      {spatialOpen && (
+        <SpatialQueryToolbar
+          onSelect={handleSpatialToolSelect}
+          onClose={handleSpatialClose}
+        />
+      )}
+
+      {spatialHint && (
+        <Alert
+          severity="info"
+          onClose={() => setSpatialMode(null)}
+          sx={{
+            position: 'absolute',
+            top: 72,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 1100,
+            backgroundColor: 'rgba(255,255,255,0.96)',
+            boxShadow: 2,
+            maxWidth: '90vw',
+          }}
+        >
+          {spatialHint}
+        </Alert>
+      )}
+
       {activeMode === 'addPoint' && !modalOpen && !warnOpen && (
         <Alert
           severity="info"
@@ -245,11 +702,10 @@ function MapView({ activeMode, onModeConsumed }) {
             whiteSpace: 'nowrap',
           }}
         >
-          Yeni nokta eklemek için haritaya tıklayın
+          Yeni nokta eklemek için haritaya tıklayın • İptal: Esc
         </Alert>
       )}
 
-      {/* Yakın nokta uyarısı */}
       <Dialog open={warnOpen} onClose={handleWarnCancel} maxWidth="xs" fullWidth>
         <DialogTitle>Yakın Nokta Uyarısı</DialogTitle>
         <DialogContent>
@@ -268,6 +724,39 @@ function MapView({ activeMode, onModeConsumed }) {
         coordinate={pendingCoord}
         onCreated={handleCreated}
         onClose={handleModalClose}
+      />
+
+      <BufferDistanceDialog
+        open={bufferDialogOpen}
+        centerLabel={bufferCenterLabel}
+        onConfirm={handleBufferConfirm}
+        onCancel={handleBufferCancel}
+      />
+
+      <QueryPointsModal
+        open={queryOpen}
+        onClose={() => {
+          setQueryOpen(false);
+          setSpatialResults(null);
+          setSpatialResultsTitle('Nokta Sorgulama');
+          setSpatialResultsHint(null);
+        }}
+        onPointSelect={handlePointSelect}
+        initialPoints={spatialResults}
+        title={spatialResultsTitle}
+        resultHint={spatialResultsHint}
+      />
+
+      <PointDetailPopup
+        open={detailOpen}
+        point={selectedPoint}
+        categories={categories}
+        onClose={() => {
+          setDetailOpen(false);
+          setSelectedPoint(null);
+        }}
+        onUpdated={handlePointUpdated}
+        onDeleted={handlePointDeleted}
       />
     </Box>
   );

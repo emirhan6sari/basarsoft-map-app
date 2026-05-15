@@ -1,0 +1,44 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Örnek Bölge — Marmara",
+        "aciklama": "Demo polygon katmanı"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [27.95, 40.75], [29.85, 40.75], [29.85, 41.45], [27.95, 41.45], [27.95, 40.75]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Örnek Bölge — İç Anadolu",
+        "aciklama": "Demo polygon katmanı"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [32.40, 39.50], [33.90, 39.50], [33.90, 40.20], [32.40, 40.20], [32.40, 39.50]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Örnek Bölge — Ege",
+        "aciklama": "Demo polygon katmanı"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [26.50, 38.20], [28.20, 38.20], [28.20, 39.10], [26.50, 39.10], [26.50, 38.20]
+        ]]
+      }
+    }
+  ]
+}

@@ -1,0 +1,186 @@
+/* PointDetailPopup — premium dialog stilleri */
+
+.pdp-dialog .MuiDialog-paper {
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow:
+    0 24px 48px rgba(15, 23, 42, 0.18),
+    0 8px 16px rgba(15, 23, 42, 0.08);
+}
+
+.pdp-header {
+  position: relative;
+  padding: 20px 24px 18px;
+  background: linear-gradient(135deg, #1a237e 0%, #283593 45%, #37474f 100%);
+  color: #fff;
+}
+
+.pdp-header::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 85% 15%, rgba(255, 255, 255, 0.12) 0%, transparent 55%);
+  pointer-events: none;
+}
+
+.pdp-header-inner {
+  position: relative;
+  z-index: 1;
+}
+
+.pdp-close {
+  position: absolute !important;
+  top: 8px;
+  right: 8px;
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+
+.pdp-close:hover {
+  color: #fff !important;
+  background: rgba(255, 255, 255, 0.12) !important;
+}
+
+.pdp-category-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(4px);
+}
+
+.pdp-category-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.pdp-body {
+  padding: 20px 24px 8px;
+  background: linear-gradient(180deg, #fafbfc 0%, #f5f7fa 100%);
+}
+
+.pdp-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+@media (max-width: 480px) {
+  .pdp-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.pdp-card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 12px 14px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.pdp-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+}
+
+.pdp-card--wide {
+  grid-column: 1 / -1;
+}
+
+.pdp-card-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #78909c;
+  margin-bottom: 4px;
+}
+
+.pdp-card-label svg {
+  font-size: 14px;
+  opacity: 0.85;
+}
+
+.pdp-card-value {
+  font-size: 0.92rem;
+  font-weight: 500;
+  color: #263238;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.pdp-card-value--mono {
+  font-family: 'Consolas', 'SF Mono', monospace;
+  font-size: 0.82rem;
+  color: #455a64;
+}
+
+.pdp-admin-section {
+  margin-top: 16px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #e8eaf6 0%, #eceff1 100%);
+  border: 1px solid rgba(26, 35, 126, 0.12);
+}
+
+.pdp-admin-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #3949ab;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pdp-footer {
+  padding: 14px 20px 18px;
+  background: #fff;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  gap: 10px;
+}
+
+.pdp-btn-edit {
+  border-radius: 10px !important;
+  text-transform: none !important;
+  font-weight: 600 !important;
+  padding: 8px 18px !important;
+}
+
+.pdp-btn-delete {
+  border-radius: 10px !important;
+  text-transform: none !important;
+  font-weight: 600 !important;
+}
+
+.pdp-delete-dialog .MuiDialog-paper {
+  border-radius: 14px;
+  padding: 4px;
+}
+
+.pdp-coord-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  border-radius: 10px;
+  background: rgba(25, 118, 210, 0.08);
+  border: 1px solid rgba(25, 118, 210, 0.15);
+  font-size: 0.8rem;
+  color: #1565c0;
+  font-family: 'Consolas', monospace;
+}

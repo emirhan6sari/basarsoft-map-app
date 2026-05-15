@@ -1,51 +1,30 @@
-// ============================================================================
-// MapPoints API — backend'in /api/mappoints endpoint'lerine sarmal
-// ----------------------------------------------------------------------------
-// React komponentleri direkt axios çağırmaz; bu modül üzerinden çağırırlar.
-// Bu sayede backend kontratı değişirse sadece burayı güncelleriz.
-// ============================================================================
-
 import apiClient from './client';
+import { unwrap } from './auth';
 
 const RESOURCE = '/api/mappoints';
 
-/**
- * Tüm noktaları listeler.
- * @returns {Promise<Array<{
- *   id: string,
- *   name: string,
- *   description: string|null,
- *   longitude: number,
- *   latitude: number,
- *   createdAt: string,
- *   updatedAt: string,
- * }>>}
- */
 export async function listMapPoints() {
-  const { data } = await apiClient.get(RESOURCE);
-  return data;
+  const response = await apiClient.get(RESOURCE);
+  return unwrap(response);
 }
 
-/**
- * Yeni nokta oluşturur.
- * @param {{ name: string, description?: string, longitude: number, latitude: number }} payload
- */
 export async function createMapPoint(payload) {
-  const { data } = await apiClient.post(RESOURCE, payload);
-  return data;
+  const response = await apiClient.post(RESOURCE, payload);
+  return unwrap(response);
 }
 
-/**
- * Mevcut noktayı günceller (full replace).
- */
 export async function updateMapPoint(id, payload) {
-  const { data } = await apiClient.put(`${RESOURCE}/${id}`, payload);
-  return data;
+  const response = await apiClient.put(`${RESOURCE}/${id}`, payload);
+  return unwrap(response);
 }
 
-/**
- * Noktayı siler.
- */
+export async function getMapPoint(id) {
+  const response = await apiClient.get(`${RESOURCE}/${id}`);
+  return unwrap(response);
+}
+
 export async function deleteMapPoint(id) {
-  await apiClient.delete(`${RESOURCE}/${id}`);
+  const response = await apiClient.delete(`${RESOURCE}/${id}`);
+  if (response.status === 204) return true;
+  return unwrap(response);
 }

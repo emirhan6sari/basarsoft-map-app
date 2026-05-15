@@ -1,0 +1,140 @@
+/* ============================================================
+   QueryPointsModal — PrimeReact DataTable stilleri
+   Tüm seçiciler .qp-* ile kapsamlanır
+   ============================================================ */
+
+.qp-wrapper {
+  font-family: inherit;
+  font-size: 0.875rem;
+}
+
+/* ── Filtre araç çubuğu ──────────────────────────────────── */
+.qp-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  padding: 8px 0 12px;
+  border-bottom: 1px solid #e0e0e0;
+  margin-bottom: 8px;
+}
+
+.qp-filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 140px;
+  flex: 1 1 160px;
+}
+
+.qp-filter-field label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #546e7a;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.qp-filter-field .p-inputtext,
+.qp-category-dropdown {
+  width: 100%;
+}
+
+.qp-filter-field .p-inputtext {
+  padding: 6px 10px;
+  border: 1px solid #b0bec5;
+  border-radius: 4px;
+  font-size: 0.85rem;
+}
+
+.qp-filter-field .p-inputtext:focus {
+  border-color: #1976d2;
+  box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.15);
+}
+
+.qp-category-dropdown.p-dropdown {
+  border: 1px solid #b0bec5;
+  border-radius: 4px;
+  background: #fff;
+}
+
+.qp-category-dropdown .p-dropdown-label {
+  padding: 6px 10px;
+  font-size: 0.85rem;
+}
+
+/* ── Tablo ───────────────────────────────────────────────── */
+.qp-wrapper .p-datatable {
+  border-radius: 6px;
+  overflow: visible;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+.qp-wrapper .p-datatable .p-datatable-wrapper {
+  overflow: auto;
+  border-radius: 6px 6px 0 0;
+}
+
+.qp-wrapper .p-datatable .p-datatable-thead > tr > th {
+  background: #37474f;
+  color: #fff;
+  font-weight: 600;
+  font-size: 0.8rem;
+  padding: 10px 12px;
+  border: none;
+  white-space: nowrap;
+}
+
+.qp-wrapper .p-datatable .p-datatable-thead > tr > th .p-column-title {
+  color: #fff;
+}
+
+.qp-wrapper .p-datatable .p-sortable-column-icon {
+  color: #cfd8dc;
+}
+
+.qp-wrapper .p-datatable .p-datatable-tbody > tr {
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.qp-wrapper .p-datatable .p-datatable-tbody > tr > td {
+  padding: 8px 12px;
+  border-bottom: 1px solid #eceff1;
+  font-size: 0.82rem;
+}
+
+.qp-wrapper .p-datatable .p-datatable-tbody > tr:hover {
+  background: #e3f2fd !important;
+}
+
+.qp-wrapper .p-datatable .p-datatable-tbody > tr.p-highlight {
+  background: #bbdefb !important;
+}
+
+.qp-wrapper .p-datatable .p-datatable-tbody > tr:nth-child(even):not(.p-highlight) {
+  background: #fafafa;
+}
+
+/* ── Paginator ───────────────────────────────────────────── */
+.qp-wrapper .p-paginator {
+  position: relative;
+  overflow: visible;
+  background: #f5f5f5;
+  border-top: 1px solid #e0e0e0;
+  padding: 8px 12px;
+  font-size: 0.8rem;
+  border-radius: 0 0 6px 6px;
+}
+
+.qp-wrapper .p-paginator .p-dropdown {
+  min-width: 4.5rem;
+  border: 1px solid #b0bec5;
+  border-radius: 4px;
+  background: #fff;
+}
+
+.qp-wrapper .p-paginator .p-dropdown-label {
+  padding: 4px 8px;
+  font-size: 0.8rem;
+}

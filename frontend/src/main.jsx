@@ -8,14 +8,12 @@
 //   - <App /> bileşeni render edilir
 // ============================================================================
 
-import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ThemeProvider, createTheme, CssBaseline } from '@mui/material';
+import { PrimeReactProvider } from 'primereact/api';
 
 import App from './App.jsx';
 import './index.css';
-// OpenLayers'ın hazır kontrol stilleri (zoom butonları, attribution vb.).
-// İleride harita eklediğimizde bu CSS'in import edilmiş olması gerekiyor.
 import 'ol/ol.css';
 
 // Basit bir MUI tema. Renkleri uygulamanın "kurumsal" havasını korumak için
@@ -33,12 +31,10 @@ const theme = createTheme({
 });
 
 createRoot(document.getElementById('root')).render(
-  <StrictMode>
+  <PrimeReactProvider value={{ appendTo: document.body, zIndex: { overlay: 2000 } }}>
     <ThemeProvider theme={theme}>
-      {/* CssBaseline: tarayıcılar arası tutarlı bir başlangıç (CSS reset).
-          Margin/padding sıfırlar, body'ye font-family uygular. */}
       <CssBaseline />
       <App />
     </ThemeProvider>
-  </StrictMode>,
+  </PrimeReactProvider>,
 );

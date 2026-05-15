@@ -1,123 +1,78 @@
-using BasarsoftOdev.Api.Dtos;
-using BasarsoftOdev.Api.Services;
+using System.Security.Claims;
+using BasarsoftOdev.BLL.Common;
+using BasarsoftOdev.BLL.Dtos;
+using BasarsoftOdev.BLL.Interfaces;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BasarsoftOdev.Api.Controllers;
 
-/// <summary>
-/// Harita noktaları için REST API.
-/// </summary>
-/// <remarks>
-/// Endpoint isimlendirmesi RESTful: kaynak adı çoğul ("mappoints"), action
-/// HTTP fiili ile ifade edilir (GET/POST/PUT/DELETE). Bu, ödev şartlarındaki
-/// "anlamlı API endpoint'leri" maddesini karşılıyor.
-/// </remarks>
 [ApiController]
-[Route("api/[controller]")]   // → /api/mappoints
+[Route("api/[controller]")]
+[Authorize]
 [Produces("application/json")]
 public class MapPointsController : ControllerBase
 {
     private readonly IMapPointService _service;
-    private readonly ILogger<MapPointsController> _logger;
 
-    public MapPointsController(IMapPointService service, ILogger<MapPointsController> logger)
-    {
-        _service = service;
-        _logger = logger;
-    }
+    public MapPointsController(IMapPointService service) => _service = service;
 
-    /// <summary>Tüm noktaları listeler (yeni eklenenler en üstte).</summary>
-    /// <response code="200">Başarılı.</response>
+    private Guid CurrentUserId =>
+        Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? User.FindFirstValue("sub")
+            ?? throw new InvalidOperationException("Kullanıcı kimliği alınamadı."));
+
+    private bool IsAdmin => User.IsInRole("Admin");
+
     [HttpGet]
-    [ProducesResponseType(typeof(IReadOnlyList<MapPointResponseDto>), StatusCodes.Status200OK)]
-    public async Task<ActionResult<IReadOnlyList<MapPointResponseDto>>> GetAll(CancellationToken cancellationToken)
+    [Authorize(Roles = "Admin,User")]
+    [ProducesResponseType(typeof(ApiResponse<IReadOnlyList<MapPointResponseDto>>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<ApiResponse<IReadOnlyList<MapPointResponseDto>>>> GetAll(CancellationToken ct)
     {
-        var items = await _service.GetAllAsync(cancellationToken);
-        return Ok(items);
+        var items = await _service.GetAllAsync(CurrentUserId, IsAdmin, ct);
+        return Ok(ApiResponse<IReadOnlyList<MapPointResponseDto>>.Ok(items, HttpContext.TraceIdentifier));
     }
 
-    /// <summary>Tek bir noktayı kimlikle getirir.</summary>
-    /// <response code="200">Bulundu.</response>
-    /// <response code="404">Kayıt yok.</response>
     [HttpGet("{id:guid}")]
-    [ProducesResponseType(typeof(MapPointResponseDto), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<MapPointResponseDto>> GetById(Guid id, CancellationToken cancellationToken)
+    [Authorize(Roles = "Admin,User")]
+    public async Task<ActionResult<ApiResponse<MapPointResponseDto>>> GetById(Guid id, CancellationToken ct)
     {
-        var item = await _service.GetByIdAsync(id, cancellationToken);
+        var item = await _service.GetByIdAsync(id, CurrentUserId, IsAdmin, ct);
         if (item is null)
-        {
-            return NotFound(new { message = $"Nokta bulunamadı: {id}" });
-        }
-        return Ok(item);
+            return NotFound(ApiResponse<MapPointResponseDto>.Fail(ErrorCodes.NotFound, $"Nokta bulunamadı: {id}", HttpContext.TraceIdentifier));
+        return Ok(ApiResponse<MapPointResponseDto>.Ok(item, HttpContext.TraceIdentifier));
     }
 
-    /// <summary>Yeni bir nokta oluşturur.</summary>
-    /// <response code="201">Oluşturuldu. <c>Location</c> header'ında detayın URL'i döner.</response>
-    /// <response code="400">Geçersiz payload (validation hatası).</response>
     [HttpPost]
-    [ProducesResponseType(typeof(MapPointResponseDto), StatusCodes.Status201Created)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult<MapPointResponseDto>> Create(
-        [FromBody] MapPointCreateDto dto,
-        CancellationToken cancellationToken)
+    [Authorize(Roles = "Admin,User")]
+    [ProducesResponseType(typeof(ApiResponse<MapPointResponseDto>), StatusCodes.Status201Created)]
+    public async Task<ActionResult<ApiResponse<MapPointResponseDto>>> Create([FromBody] MapPointCreateDto dto, CancellationToken ct)
     {
-        // [ApiController] attribute'u DataAnnotation hatalarını otomatik 400'e
-        // çevirir, ama ek sanity check'i loglayıp net yanıt için tutuyoruz.
-        if (!ModelState.IsValid)
-        {
-            return ValidationProblem(ModelState);
-        }
-
-        var created = await _service.CreateAsync(dto, cancellationToken);
-        _logger.LogInformation("Nokta oluşturuldu: {Id} ({Name})", created.Id, created.Name);
-
-        return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
+        var created = await _service.CreateAsync(dto, CurrentUserId, ct);
+        return CreatedAtAction(
+            nameof(GetById),
+            new { id = created.Id },
+            ApiResponse<MapPointResponseDto>.Ok(created, HttpContext.TraceIdentifier));
     }
 
-    /// <summary>Mevcut bir noktayı tamamen günceller (full replace).</summary>
-    /// <response code="200">Güncellendi.</response>
-    /// <response code="400">Geçersiz payload.</response>
-    /// <response code="404">Güncellenecek kayıt yok.</response>
     [HttpPut("{id:guid}")]
-    [ProducesResponseType(typeof(MapPointResponseDto), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<MapPointResponseDto>> Update(
-        Guid id,
-        [FromBody] MapPointUpdateDto dto,
-        CancellationToken cancellationToken)
+    [Authorize(Roles = "Admin,User")]
+    public async Task<ActionResult<ApiResponse<MapPointResponseDto>>> Update(Guid id, [FromBody] MapPointUpdateDto dto, CancellationToken ct)
     {
-        if (!ModelState.IsValid)
-        {
-            return ValidationProblem(ModelState);
-        }
-
-        var updated = await _service.UpdateAsync(id, dto, cancellationToken);
+        var updated = await _service.UpdateAsync(id, dto, CurrentUserId, IsAdmin, ct);
         if (updated is null)
-        {
-            return NotFound(new { message = $"Güncellenecek nokta bulunamadı: {id}" });
-        }
-
-        _logger.LogInformation("Nokta güncellendi: {Id}", id);
-        return Ok(updated);
+            return NotFound(ApiResponse<MapPointResponseDto>.Fail(ErrorCodes.NotFound, $"Güncellenecek nokta yok: {id}", HttpContext.TraceIdentifier));
+        return Ok(ApiResponse<MapPointResponseDto>.Ok(updated, HttpContext.TraceIdentifier));
     }
 
-    /// <summary>Bir noktayı siler.</summary>
-    /// <response code="204">Silindi.</response>
-    /// <response code="404">Kayıt yok.</response>
     [HttpDelete("{id:guid}")]
+    [Authorize(Roles = "Admin,User")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
+    public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
     {
-        var deleted = await _service.DeleteAsync(id, cancellationToken);
+        var deleted = await _service.DeleteAsync(id, CurrentUserId, IsAdmin, ct);
         if (!deleted)
-        {
-            return NotFound(new { message = $"Silinecek nokta bulunamadı: {id}" });
-        }
-
-        _logger.LogInformation("Nokta silindi: {Id}", id);
+            return NotFound(ApiResponse<object>.Fail(ErrorCodes.NotFound, $"Silinecek nokta yok: {id}", HttpContext.TraceIdentifier));
         return NoContent();
     }
 }
