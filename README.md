@@ -9,6 +9,8 @@ Bu depo, Başarsoft’un paylaştığı **OpenLayers tabanlı web harita** ödev
 
 **Veri saklama tercihi (ödev metni):** PDF’de JSON/TXT, SQLite veya PostgreSQL seçenekleri vardı. Bu projede **PostgreSQL 16+** ve **EF Core migration** kullanıldı; koordinatlar hem WGS84 hem Web Mercator sütunlarında tutulur. Teslimde **pg_dump yedeği** beklenmektedir ([Veritabanı yedeği](#veritabanı-yedeği)).
 
+**Canlı demo (Railway):** [Frontend](https://basarsoft-map-app-production-8e56.up.railway.app) · [API](https://basarsoft-map-app-production.up.railway.app) · [Swagger](https://basarsoft-map-app-production.up.railway.app/swagger) — giriş: `admin` / `admin` (geliştirme seed).
+
 ---
 
 ## Bu README’yi nasıl okumalısınız?
@@ -41,6 +43,7 @@ Bu depo, Başarsoft’un paylaştığı **OpenLayers tabanlı web harita** ödev
 - [BAŞARSOFT demo verisi (SQL, opsiyonel)](#başarsoft-demo-verisi-sql-opsiyonel)
 - [Canlı Yayın (Railway)](#canlı-yayın-railway)
 - [Opsiyonel Geliştirmeler](#opsiyonel-geliştirmeler)
+- [Son güncellemeler](#son-güncellemeler)
 - [Bilinen Sınırlamalar](#bilinen-sınırlamalar)
 
 ---
@@ -160,7 +163,7 @@ Zorunlu 10 madde; her biri için ayrıntılı tablolar aşağıdadır.
 | "Add Point" -> haritada tıklama | Menü **Nokta Ekle** -> tıklama modu -> `AddPointModal` |
 | Modal: ad, numara, açıklama, kategori | Aynı alanlar; kategoriler `GET /api/categories` (Depo, Bayi, Müşteri, Ofis seed) |
 | Kayıt: id, ad, numara, açıklama, kategori, 4326, 3857, tarih | `MapPoint` entity + `MapPointResponseDto` |
-| Yakın koordinata ikinci nokta uyarısı | 50 m – frontend ön kontrol + API **409** `PROXIMITY_WARNING` |
+| Yakın koordinata ikinci nokta uyarısı | 50 m – frontend ön kontrol + API **409** `PROXIMITY_WARNING`; kullanıcı onaylarsa `confirmProximityWarning: true` ile kayıt (`proximityConfirm.js`) |
 | Veri API ile saklanır | `POST /api/MapPoints` |
 
 ---
@@ -194,6 +197,7 @@ Zorunlu 10 madde; her biri için ayrıntılı tablolar aşağıdadır.
 | :--- | :--- |
 | Noktaya tıklanınca popup | `PointDetailPopup` |
 | Görüntüle / güncelle / sil | `PUT` / `DELETE` API; silmede onay dialogu |
+| Admin: ekleyen kullanıcı | `createdByUserName`, `createdByDisplayName` — bbox listesinde ve detayda; `MapPointRepository` `Include(CreatedBy)` |
 | Silme onayı | MUI `Dialog` onay penceresi |
 | Soft delete | `IsDeleted` – veritabanından fiziksel silinmez |
 
@@ -276,12 +280,12 @@ Başarsoft’un ilettiği maildeki beklentiler:
 - [x] Mouse konumuna göre anlık **EPSG:4326 / EPSG:3857** koordinat gösterimi
 - [x] Nokta ekleme: modal ile **ad, numara, açıklama, kategori** (kategoriler veritabanından)
 - [x] Backend’den nokta listeleme ve haritada gösterme (cluster + kategori renkleri)
-- [x] Yakın nokta uyarısı (**50 m** — hem frontend hem API `PROXIMITY_WARNING`)
-- [x] Katman paneli, kategori legend, üst menü (Nokta Ekle / İçe Aktar / Ölçüm / Sorgula / Mekansal Sorgu / Katmanlar)
+- [x] Yakın nokta uyarısı (**50 m** — frontend ön kontrol + API `PROXIMITY_WARNING`; onay sonrası `confirmProximityWarning` ile kayıt)
+- [x] Katman paneli, kategori legend, harita zoom etiketi (`MapZoomLabel`), üst menü (Nokta Ekle / İçe Aktar / Ölçüm / Sorgula / Mekansal Sorgu / Katmanlar)
 - [x] Nokta sorgulama tablosu (filtre, GeoJSON/CSV dışa aktarma), detay popup (görüntüle / düzenle / sil)
 - [x] Mekansal sorgu: buffer, dikdörtgen (drag box), poligon çizimi
 - [x] JWT + refresh token, **LoginOverlay** (giriş / kayıt), roller: **Admin**, **User**
-- [x] Admin tüm noktaları görür; User yalnızca kendi eklediklerini
+- [x] Admin tüm noktaları görür; User yalnızca kendi eklediklerini; Admin detayda **ekleyen kullanıcı** (kullanıcı adı + görünen ad)
 - [x] Veritabanında **4326 ve 3857** koordinatların birlikte saklanması
 - [x] Standart API yanıtı: `ApiResponse<T>` (`success`, `data`, `error`, `traceId`)
 - [x] Serilog (konsol + dosya, TraceId/UserName), `LoggingScopeMiddleware`, `RequestLoggingMiddleware`, FluentValidation, global exception middleware
@@ -303,6 +307,8 @@ Ayrıntılar için [Opsiyonel Geliştirmeler](#opsiyonel-geliştirmeler) bölüm
 
 - [x] GeoJSON / CSV dışa aktarma — `QueryPointsModal` + `pointExport.js` (sorgu sonucu indirme)
 - [x] BAŞARSOFT demo verisi — [BAŞARSOFT demo verisi (SQL, opsiyonel)](#başarsoft-demo-verisi-sql-opsiyonel) (`BASAR-*`, 10k nokta, Türkiye üzerinde yazı)
+- [x] Railway canlı yayın — Docker (`backend/`, `frontend/`), CORS `*.up.railway.app`, `serve` ile static frontend ([Canlı Yayın](#canlı-yayın-railway))
+- [x] Türkçe arayüz metinleri — `QueryPointsModal` ve ilgili bileşenlerde UTF-8 karakterler (ör. kategori filtresi **Tümü**)
 
 ---
 
@@ -367,6 +373,10 @@ BasarsoftOdev.Domain   (entity, enum, value object)
 | `Longitude`, `Latitude` | EPSG:4326 (WGS84) |
 | `XMercator`, `YMercator` | EPSG:3857 (Web Mercator) |
 | `CreatedAt` | Oluşturulma tarihi |
+| `CreatedByUserId` | Ekleyen kullanıcı (Identity FK) |
+| `IsDeleted`, `DeletedAt`, `DeletedByUserId` | Soft delete |
+
+**API yanıtı (Admin):** `createdByUserId`, `createdByUserName`, `createdByDisplayName` — bbox ile harita listesinde de döner (`MapPointService.ListAsync`, `Include(CreatedBy)`).
 
 Create/update isteğinde yalnızca 4326 **veya** 3857 gönderilebilir; `CoordinateTransformationService` eksik alanları doldurur. Yakınlık kontrolü 3857 metre koordinatları üzerinden yapılır.
 
@@ -387,8 +397,8 @@ basar_odev/
 │   └── src/
 │       ├── api/                    # auth.js, client.js, mapPoints.js, categories.js
 │       ├── hooks/                  # useOpenLayersMap, useMapPointHistory
-│       ├── utils/                  # mapBbox, mapPerformance, measureFormat, geoImportUtils, pointExport, …
-│       └── components/             # MapView, QueryPointsModal, LoginOverlay, ImportGeometryModal, …
+│       ├── utils/                  # mapBbox, mapPerformance, measureFormat, geoImportUtils, pointExport, proximityConfirm, …
+│       └── components/             # MapView, QueryPointsModal, PointDetailPopup, ImportGeometryModal, MapZoomLabel, MeasurementToolbar, UndoRedoControls, …
 ├── database/                       # yedekler + SQL scriptleri (opsiyonel test)
 │   ├── seed_performance_test_points.sql   # 10k rastgele (PERF-*)
 │   ├── seed_basartext_points.sql          # 10k “BAŞARSOFT” yazısı (BASAR-*)
@@ -753,9 +763,15 @@ Yanıt gövdesi artık `MapPointListResultDto`:
 }
 ```
 
-**Örnek yanıt alanları:** `id`, `name`, `number`, `description`, `category`, `longitude`, `latitude`, `xMercator`, `yMercator`, `createdAt`.
+**Örnek yanıt alanları:** `id`, `name`, `number`, `description`, `category`, `longitude`, `latitude`, `xMercator`, `yMercator`, `createdAt`, `createdByUserId` (+ Admin için `createdByUserName`, `createdByDisplayName`).
 
-Yakınlık ihlali: HTTP **409**, `error.code`: `PROXIMITY_WARNING` (yarıçap `Map:ProximityRadiusMeters`, varsayılan **50**).
+**Oluşturma / güncelleme gövdesi (opsiyonel):**
+
+| Alan | Açıklama |
+|------|----------|
+| `confirmProximityWarning` | `false` (varsayılan): 50 m içinde başka nokta varsa kayıt reddedilir (**409**). `true`: kullanıcı uyarıyı onayladı — kayıt yapılır. |
+
+Yakınlık ihlali: HTTP **409**, `error.code`: `PROXIMITY_WARNING` (yarıçap `Map:ProximityRadiusMeters`, varsayılan **50**). Frontend: `withProximityConfirm()` (`proximityConfirm.js`) — tarayıcı `confirm` ile ikinci istek.
 
 #### İçe aktarım (`POST /api/MapPoints/import`)
 
@@ -1099,14 +1115,64 @@ psql -U postgres -h localhost -d basarsoft_map -f database/delete_basartext_poin
 
 ## Canlı Yayın (Railway)
 
-1. GitHub repo → Railway projesi  
-2. PostgreSQL eklentisi (PostGIS gerekmez)  
-3. **Backend** servisi: root **`backend`** (tüm katmanlar için; `backend/BasarsoftOdev.Api` tek başına build hatası verir). `backend/Dockerfile` veya `backend/nixpacks.toml` kullanılır; deploy sonrası `/health/db` → `{"connected":true,"check":"no-type-loading-v2"}`  
-4. Ortam: `DATABASE_URL`, `Jwt__SecretKey`, `Cors__AllowedOrigins` (frontend URL)  
-5. **Frontend** servisi: root `frontend`, build `npm run build`, static `dist`  
-6. Frontend: `VITE_API_BASE_URL` = backend public URL  
+GitHub `main` dalına push sonrası otomatik deploy (örnek proje: `emirhan6sari/basarsoft-map-app`).
 
-**Canlı URL:** *(deploy sonrası eklenecek)*
+### Servis yapılandırması
+
+| Servis | Kök dizin | Build | Not |
+|--------|-----------|-------|-----|
+| **API** | `backend` | `backend/Dockerfile` | `BasarsoftOdev.Api` tek başına değil — BLL/DAL/Domain gerekir |
+| **Frontend** | `frontend` | `frontend/Dockerfile` | `npm ci` + `npm run build`; runtime `serve -s dist` |
+| **PostgreSQL** | Railway eklentisi | — | PostGIS zorunlu değil |
+
+### Ortam değişkenleri
+
+**API**
+
+| Değişken | Örnek / açıklama |
+|----------|------------------|
+| `DATABASE_URL` | Railway PostgreSQL (otomatik) |
+| `Jwt__SecretKey` | En az 32 karakter |
+| `ASPNETCORE_URLS` | `http://0.0.0.0:${PORT}` |
+| `Cors__AllowedOrigins__0` | Frontend public URL (ör. `https://….up.railway.app`) |
+
+API ayrıca `*.up.railway.app` origin’lerine CORS izni verir (`Program.cs`).
+
+**Frontend**
+
+| Değişken | Açıklama |
+|----------|----------|
+| `VITE_API_BASE_URL` | Build arg / env — API public URL (sonunda `/` olmadan) |
+| `PORT` | Railway atar; `serve` `0.0.0.0:${PORT}` dinler |
+
+### Sağlık ve doğrulama
+
+| URL | Beklenen |
+|-----|----------|
+| `GET /` | API ayakta |
+| `GET /health/db` | `{"connected":true,...}` |
+| `GET /swagger` | Swagger UI |
+
+Üretimde HTTPS redirect kapalıdır; Railway TLS sonlandırır.
+
+### Canlı adresler (örnek)
+
+| Bileşen | URL |
+|---------|-----|
+| Frontend | https://basarsoft-map-app-production-8e56.up.railway.app |
+| API | https://basarsoft-map-app-production.up.railway.app |
+| Swagger | https://basarsoft-map-app-production.up.railway.app/swagger |
+
+> URL’ler Railway proje adına göre değişir; kendi servislerinizin **Settings → Domains** alanından güncel adresi alın.
+
+### Veritabanı taşıma (yerel → Railway)
+
+```powershell
+pg_dump -U postgres -h localhost -d basarsoft_map -F c -f database/basarsoft_map_railway.backup
+pg_restore -h <RAILWAY_HOST> -p <PORT> -U postgres -d railway -c database/basarsoft_map_railway.backup
+```
+
+Public proxy host/port Railway PostgreSQL servisinden alınır. Restore sonrası seed kullanıcı `admin` / `admin` ile giriş yapılabilir.
 
 ---
 
@@ -1189,7 +1255,7 @@ Case dokümanındaki opsiyonel maddeler ve projedeki karşılıkları.
 
 | Katman | Davranış |
 |--------|----------|
-| API | `Count` + `Take(limit)`; hafif sorgu (bbox listesinde `Include` yok) |
+| API | `Count` + `Take(limit)`; bbox sorgusunda Admin için `Include(CreatedBy)` |
 | Harita | Zoom &lt; 7 → yükleme yok; zoom 7–8 → `limit` 10000; daha yakın → 800–2500 |
 | Cluster | Nokta sayısına göre mesafe 45–72 px |
 | UI | “Yakınlaştırın” / “X/Y gösteriliyor” uyarıları |
@@ -1273,7 +1339,24 @@ Case dokümanındaki opsiyonel maddeler ve projedeki karşılıkları.
 
 ---
 
-##  Sınırlamalar
+## Son güncellemeler
+
+Temel ödev + opsiyonel maddeler tamamlandıktan sonra eklenen başlıca geliştirmeler (kronolojik özet):
+
+| Tarih / commit alanı | Değişiklik |
+|----------------------|------------|
+| **Harita araçları** | `ImportGeometryModal`, `MeasurementToolbar` / `MeasurementResultPanel`, `UndoRedoControls`, `useMapPointHistory`, `MapZoomLabel` (anlık zoom), `mapBbox.js`, `mapPerformance.js` |
+| **Railway deploy** | `backend/Dockerfile`, `frontend/Dockerfile` (`serve`), API `PORT` bağlama, üretimde HTTPS redirect kapalı, CORS `*.up.railway.app`, PostGIS/Npgsql type-loading düzeltmeleri |
+| **Yakınlık onayı** | `ConfirmProximityWarning` (DTO); 409 sonrası kullanıcı onayı → `proximityConfirm.js` (`AddPointModal`, `PointDetailPopup`, `MapView`) |
+| **Admin ekleyen** | Bbox harita listesinde `createdByUserName` / `createdByDisplayName`; oluşturma yanıtında `CreatedBy` include; detay popup’ta düzenlemeden önce de görünür |
+| **Türkçe UI** | `QueryPointsModal` placeholder ve mesajlarda UTF-8 (ör. **Tümü**, **İsme göre ara…**) |
+| **Yerel API** | `appsettings.json` şablon JWT secret (yalnızca geliştirme; üretimde Railway env) |
+
+İlgili bölümler: [§2 Nokta ekleme](#2-nokta-ekleme), [§5 Güncelleme](#5-nokta-güncelleme-ve-silme), [REST API](#rest-api), [Opsiyonel Geliştirmeler](#opsiyonel-geliştirmeler), [Canlı Yayın](#canlı-yayın-railway).
+
+---
+
+## Bilinen Sınırlamalar
 
 - Bbox dışındaki noktalar haritada görünmez; `truncated: true` ise tüm alan yüklenmemiştir — yakınlaştırın veya zoom artırın  
 - Çok uzak zoom’da (harita &lt; 7) nokta isteği gönderilmez (`MIN_ZOOM_FOR_POINT_LOAD`)  
