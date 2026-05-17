@@ -4,6 +4,20 @@ using Microsoft.Extensions.Options;
 
 namespace BasarsoftOdev.Api.Middleware;
 
+/// <summary>
+/// Her HTTP isteğinin tamamlanma süresini ve durum kodunu yapılandırılmış
+/// Serilog logu olarak yazar. Bu loglar Serilog sink'leri tarafından
+/// 'app_logs' tablosuna (PostgreSQL) ve Console'a iletilir.
+///
+/// Davranış:
+///   - 5xx → LogError    (her zaman üretim alarmı için)
+///   - 4xx veya yavaş istek (Logging:SlowRequestThresholdMs üstü) → LogWarning
+///   - Diğer → LogInformation
+///   - Logging:SkipPathPrefixes ile eşleşen yollar (örn. /swagger, /health) atlanır
+///
+/// LoggingScopeMiddleware ile eşleşir: TraceId / UserName otomatik olarak
+/// her log satırına eklenir (LogContext.PushProperty).
+/// </summary>
 public class RequestLoggingMiddleware
 {
     private readonly RequestDelegate _next;

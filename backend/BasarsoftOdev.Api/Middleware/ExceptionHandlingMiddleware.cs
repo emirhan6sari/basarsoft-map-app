@@ -8,6 +8,16 @@ using Serilog.Context;
 
 namespace BasarsoftOdev.Api.Middleware;
 
+/// <summary>
+/// Global hata yakalayıcı. Pipeline'da en üstte çalışır:
+///   - FluentValidation.ValidationException → 400 + alan bazlı validationErrors
+///   - BLL BusinessException → exception içindeki StatusCode/Code/Message
+///   - Diğer (beklenmeyen) → 500 + ErrorCodes.Internal
+///
+/// Her hata `app_logs` tablosuna (Serilog PostgreSQL sink) ve Console'a
+/// yazılır; TraceId / UserId / UserName log scope'a eklenir. Client'a daima
+/// ApiResponse<T> formatında JSON döner — stack trace dışarı sızdırılmaz.
+/// </summary>
 public class ExceptionHandlingMiddleware
 {
     private readonly RequestDelegate _next;

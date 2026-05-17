@@ -96,7 +96,15 @@ dotnet run
 | API | http://localhost:5226 |
 | Swagger | http://localhost:5226/swagger |
 
-Seed: **admin** / **admin** (Admin rolü).
+**Varsayılan giriş bilgileri**
+
+| Alan | Değer |
+|------|-------|
+| **Kullanıcı adı** | `admin` |
+| **Parola** | `admin` |
+| Rol | Admin |
+
+Bu kullanıcı **uygulamanın ilk çalıştırılmasında otomatik olarak oluşturulur** (bkz. `DependencyInjection.SeedDatabaseAsync`). Eğer aynı kullanıcı adı zaten varsa seed atlanır; parola ham olarak saklanmaz, ASP.NET Core Identity tarafından hash'lenerek `AspNetUsers` tablosuna yazılır. Yeni kullanıcılar **Kayıt Ol** ekranından eklenebilir; bunlara varsayılan olarak **User** rolü atanır.
 
 **4. Frontend**
 
@@ -288,7 +296,7 @@ Başarsoft’un ilettiği maildeki beklentiler:
 - [x] Admin tüm noktaları görür; User yalnızca kendi eklediklerini; Admin detayda **ekleyen kullanıcı** (kullanıcı adı + görünen ad)
 - [x] Veritabanında **4326 ve 3857** koordinatların birlikte saklanması
 - [x] Standart API yanıtı: `ApiResponse<T>` (`success`, `data`, `error`, `traceId`)
-- [x] Serilog (konsol + dosya, TraceId/UserName), `LoggingScopeMiddleware`, `RequestLoggingMiddleware`, FluentValidation, global exception middleware
+- [x] Serilog (Console + PostgreSQL `app_logs` tablosu, TraceId/UserName), `LoggingScopeMiddleware`, `RequestLoggingMiddleware`, FluentValidation, global exception middleware
 
 ### Opsiyonel geliştirmeler (uygulanan)
 
@@ -324,7 +332,7 @@ Ayrıntılar için [Opsiyonel Geliştirmeler](#opsiyonel-geliştirmeler) bölüm
 | Kimlik | ASP.NET Core Identity + JWT | Cookie değil; Bearer token |
 | ORM | EF Core 9 | Koordinatlar ayrı sütunlarda (4326 + 3857) |
 | Doğrulama | FluentValidation | BLL DTO’ları |
-| Log | Serilog | `Logs/log-*.txt` |
+| Log | Serilog | PostgreSQL `app_logs` tablosu + Console (dosya yok) |
 | Geometri (import) | NetTopologySuite | WKT / GeoJSON parse (BLL) |
 | Veritabanı | PostgreSQL 16+ | Nokta verisi ve Identity |
 
@@ -858,7 +866,7 @@ WKT veya GeoJSON metninden koordinatlar çıkarılır; her koordinat bir `MapPoi
 | `Cors:AllowedOrigins` | Ek frontend origin’leri |
 | `Logging:SlowRequestThresholdMs` | Yavaş istek eşiği (ms, varsayılan 2000) |
 | `Logging:SkipPathPrefixes` | İstek logu atlanacak path önekleri |
-| `Serilog` | MinimumLevel, Console/File sink, enrichers |
+| `Serilog` | MinimumLevel, Console sink, enrichers (DB sink kodda — `Program.cs:ConfigureSerilog`) |
 
 Ortam değişkeni örneği: `ConnectionStrings__DefaultConnection`, `Jwt__SecretKey`.
 
@@ -1286,35 +1294,91 @@ Case dokümanındaki opsiyonel maddeler ve projedeki karşılıkları.
 
 ### 7. Loglama (tamamlandı)
 
-**Serilog**
+**Yaklaşım:** Loglar dosyaya değil, **PostgreSQL'deki `app_logs` tablosuna** yazılır. Tablo Serilog tarafından ilk yazımda otomatik oluşturulur (`needAutoCreateTable: true`). Yapılandırma kodda yapılır — `backend/BasarsoftOdev.Api/Program.cs:ConfigureSerilog`.
 
-- Konsol + günlük dönen dosya: `backend/BasarsoftOdev.Api/Logs/log-YYYYMMDD.txt`
-- Dosya şablonu: `TraceId`, `UserName`, `SourceContext`, mesaj
-- EF Core / Microsoft framework logları `Warning` seviyesinde
+#### Akış (özet)
 
-**Middleware**
+```
+HTTP isteği
+  ├─► LoggingScopeMiddleware        TraceId / UserId / UserName → Serilog LogContext
+  ├─► RequestLoggingMiddleware       method · route · status · süre (Info/Warning/Error)
+  └─► Controller → BLL servisleri    iş mantığı logları (AuthService, MapPointService, …)
+       └─► (hata) ExceptionHandlingMiddleware → ApiResponse + LogError/LogWarning
+
+Serilog pipeline (Program.cs:ConfigureSerilog)
+  ├─► Console sink         (Railway log streaming + dev terminal)
+  └─► PostgreSQL sink      tablo: app_logs   batch: 50 / 5 sn   level: Information+
+```
+
+#### Sink'ler
+
+| Sink | Davranış |
+|------|----------|
+| **Console** (`Serilog.Sinks.Console`) | Stdout — Railway log paneli ve `dotnet run` terminalinde görünür |
+| **PostgreSQL** (`Serilog.Sinks.Postgresql.Alternative` 4.2.0) | `app_logs` tablosuna 5 saniyede bir veya 50 kayıt biriktiğinde batch insert |
+| **Testing ortamı** | InMemory DB ile çalıştığı için DB sink atlanır, yalnızca Console |
+
+#### `app_logs` tablosu — sütunlar
+
+| Sütun | Tür | İçerik |
+|-------|-----|--------|
+| `timestamp` | `timestamptz` | Log üretildiği an |
+| `level` | `varchar` | `Information`, `Warning`, `Error`, `Fatal` |
+| `message` | `text` | Render edilmiş mesaj (`{Method} {Route} → {Status}`) |
+| `message_template` | `text` | Ham Serilog şablonu (gruplama/aramada faydalı) |
+| `exception` | `text` | Stack trace (varsa) |
+| `trace_id` | `varchar` | `LoggingScopeMiddleware` → `HttpContext.TraceIdentifier` |
+| `user_id` | `varchar` | `ClaimTypes.NameIdentifier` (yoksa `anonymous`) |
+| `user_name` | `varchar` | `HttpContext.User.Identity.Name` (yoksa `anonymous`) |
+| `source_context` | `varchar` | Logger sınıfı (`MapPointService`, `AuthService`, …) |
+| `properties` | `jsonb` | Tüm structured payload (method, route, status, elapsedMs, …) |
+
+> `properties` JSONB olduğu için PostgreSQL'de operatörlerle (`->>`, `@>`) sorgulanabilir:
+> ```sql
+> SELECT timestamp, message, properties->>'Method' AS method
+> FROM app_logs
+> WHERE level = 'Error'
+> ORDER BY timestamp DESC
+> LIMIT 50;
+> ```
+
+#### Middleware'ler
 
 | Bileşen | Görev |
 |---------|--------|
-| `LoggingScopeMiddleware` | Her istekte `TraceId`, `UserId`, `UserName` → Serilog `LogContext` |
-| `RequestLoggingMiddleware` | HTTP method, route, status, süre (ms); 4xx/5xx ve yavaş istekler `Warning`/`Error` |
-| `ExceptionHandlingMiddleware` | Hataları aynı bağlam alanlarıyla loglar |
+| `LoggingScopeMiddleware` | Her istekte `TraceId`, `UserId`, `UserName` → Serilog `LogContext.PushProperty`; sonraki tüm loglara otomatik eklenir |
+| `RequestLoggingMiddleware` | HTTP method, route, status, süre; 5xx → `LogError`, 4xx veya yavaş → `LogWarning`, diğer → `LogInformation` |
+| `ExceptionHandlingMiddleware` | Beklenmeyen hata → `LogError(ex, …)`; iş kuralı/validasyon → `LogWarning`; Client'a daima `ApiResponse<T>` döner |
 
-**Yapılandırma** (`appsettings.json` → `Logging`)
+#### Yapılandırma anahtarları
 
-| Anahtar | Varsayılan | Açıklama |
-|---------|------------|----------|
-| `SlowRequestThresholdMs` | 2000 | Bu süreyi aşan istekler `[yavaş]` etiketiyle Warning |
-| `SkipPathPrefixes` | `/swagger`, `/health`, … | Gürültü azaltma — bu path’lerde istek logu yok |
+| Anahtar (`appsettings.json`) | Varsayılan | Açıklama |
+|------------------------------|------------|----------|
+| `Logging:SlowRequestThresholdMs` | 2000 | Bu süreyi aşan istekler Warning olarak loglanır |
+| `Logging:SkipPathPrefixes` | `/swagger`, `/health`, `/favicon` | İstek logu atlanacak yol önekleri (gürültü azaltma) |
+| `Serilog:MinimumLevel` | `Information` (override: `Microsoft`/`System`/`EF Core` → `Warning`) | Genel seviye + framework gürültüsü filtresi |
 
-**İş mantığı logları (BLL)**
+DB sink ayrıntıları kod tarafında: `Program.cs:ConfigureSerilog` (batch size, period, column writers).
 
-- `AuthService` — giriş başarısız/başarılı, kayıt, çıkış
+#### İş mantığı logları (BLL)
+
+- `AuthService` — giriş başarısız/başarılı, kayıt, çıkış, token yenileme
 - `MapPointService` — CRUD, bbox kısaltma (`truncated`), import
+- `CategoryService` — kategori ekleme/güncelleme
 
-**API yanıtı ile eşleştirme:** `ApiResponse.traceId` = HTTP `TraceIdentifier` = log dosyasındaki `[TraceId]`.
+#### API yanıtı ile eşleşme
 
-> `Logs/` klasörü commit edilmemeli (`.gitignore`).
+`ApiResponse.traceId` = `HttpContext.TraceIdentifier` = `app_logs.trace_id`.
+Aynı `traceId`'yi DB'de sorgulayarak bir HTTP isteğinin tüm log satırlarını (request log + servis logları + exception) zincir halinde görebilirsiniz:
+
+```sql
+SELECT timestamp, level, source_context, message, exception
+FROM app_logs
+WHERE trace_id = '00-abc...-def-01'
+ORDER BY timestamp ASC;
+```
+
+> Dosyaya log yazılmaz; eskiden kullanılan `backend/BasarsoftOdev.Api/Logs/` klasörü artık üretilmez. `.gitignore`'da bırakılmıştır (yanlışlıkla geri eklenmemesi için).
 
 ---
 
@@ -1351,6 +1415,8 @@ Temel ödev + opsiyonel maddeler tamamlandıktan sonra eklenen başlıca gelişt
 | **Admin ekleyen** | Bbox harita listesinde `createdByUserName` / `createdByDisplayName`; oluşturma yanıtında `CreatedBy` include; detay popup’ta düzenlemeden önce de görünür |
 | **Türkçe UI** | `QueryPointsModal` placeholder ve mesajlarda UTF-8 (ör. **Tümü**, **İsme göre ara…**) |
 | **Yerel API** | `appsettings.json` şablon JWT secret (yalnızca geliştirme; üretimde Railway env) |
+| **Loglama (tablo)** | Dosya tabanlı log kaldırıldı; Serilog → PostgreSQL `app_logs` tablosu (`Serilog.Sinks.Postgresql.Alternative`, auto-create, JSONB `properties`) — `Program.cs:ConfigureSerilog` |
+| **Kod yorumları** | `Program.cs`, `LoggingScopeMiddleware`, `RequestLoggingMiddleware`, `ExceptionHandlingMiddleware`, `SeedDatabaseAsync` üzerine açıklayıcı XML/inline yorumlar |
 
 İlgili bölümler: [§2 Nokta ekleme](#2-nokta-ekleme), [§5 Güncelleme](#5-nokta-güncelleme-ve-silme), [REST API](#rest-api), [Opsiyonel Geliştirmeler](#opsiyonel-geliştirmeler), [Canlı Yayın](#canlı-yayın-railway).
 
@@ -1365,7 +1431,7 @@ Temel ödev + opsiyonel maddeler tamamlandıktan sonra eklenen başlıca gelişt
 - Undo/redo yalnızca oturum içi; sayfa yenilenince geçmiş silinir  
 - Ölçüm çizimleri veritabanına kaydedilmez  
 - Integration testler InMemory DB kullanır; PostgreSQL indeks davranışı ayrı doğrulanmalıdır  
-- `backend/BasarsoftOdev.Api/Logs/` çalışma zamanı logları commit edilmemeli  
+- Loglar PostgreSQL `app_logs` tablosuna yazılır; üretimde tablo büyüyebilir — gerekirse `retentionTime` veya periyodik `DELETE` ile temizleyin  
 
 ---
 

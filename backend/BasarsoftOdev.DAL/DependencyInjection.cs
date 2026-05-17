@@ -89,6 +89,14 @@ public static class DependencyInjection
         logger.LogInformation("Migration tamamlandı.");
     }
 
+    /// <summary>
+    /// Uygulama başlangıcında çağrılır. Rolleri (Admin, User) ve varsayılan
+    /// admin kullanıcısını idempotent olarak oluşturur:
+    ///   - Roller yoksa: Admin ve User rolleri eklenir.
+    ///   - 'admin' kullanıcısı yoksa: UserName="admin", Password="admin"
+    ///     (geliştirme amaçlı — UserManager şifreyi otomatik hash'ler).
+    ///   - Daha önce oluşturulmuşsa atlanır (uygulamayı tekrar başlatmak güvenli).
+    /// </summary>
     public static async Task SeedDatabaseAsync(this IHost host)
     {
         using var scope = host.Services.CreateScope();
@@ -98,6 +106,8 @@ public static class DependencyInjection
         var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole<Guid>>>();
         var logger = scope.ServiceProvider.GetRequiredService<ILogger<AppDbContext>>();
 
+        // Opsiyonel: Seed:TruncateUsersOnStartup=true ise tüm kullanıcılar temizlenir
+        // (sadece sıfırdan kurulum/test senaryoları için).
         var truncateUsers = config.GetValue("Seed:TruncateUsersOnStartup", false);
         if (truncateUsers)
         {
@@ -109,12 +119,15 @@ public static class DependencyInjection
             await db.Database.ExecuteSqlRawAsync("DELETE FROM \"AspNetUsers\";");
         }
 
+        // Roller (Admin/User) — yoksa eklenir.
         foreach (var roleName in new[] { "Admin", "User" })
         {
             if (!await roleManager.RoleExistsAsync(roleName))
                 await roleManager.CreateAsync(new IdentityRole<Guid> { Name = roleName });
         }
 
+        // Varsayılan admin: 'admin' / 'admin' — UserManager.CreateAsync ile
+        // BCrypt benzeri Identity hash'i otomatik üretilir, ham şifre DB'de tutulmaz.
         const string adminUserName = "admin";
         const string adminPassword = "admin";
 
