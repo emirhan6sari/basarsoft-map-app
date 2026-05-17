@@ -44,7 +44,7 @@ try
     // ile birlikte yapılandırılmış halde yazılır; 'properties' sütununda JSONB
     // olarak tüm structured payload saklanır.
     // ---------------------------------------------------------------------------
-    ConfigureSerilog(builder, connectionString, useInMemoryDb);
+    ConfigureSerilog(builder, connectionString, useInMemoryDb, builder.Environment);
 
     builder.Services.AddApiServices(
         builder.Configuration,
@@ -56,6 +56,20 @@ try
         builder.Services.AddHostedService<DatabaseInitializerHostedService>();
 
     var app = builder.Build();
+
+    // app_logs tablosu migration'dan önce istek gelebilir — sink yazmadan önce tabloyu garanti et.
+    if (!useInMemoryDb && !string.IsNullOrWhiteSpace(connectionString))
+    {
+        try
+        {
+            await DatabaseBootstrap.EnsureAppLogsTableAsync(connectionString);
+            Log.Information("Serilog PostgreSQL sink aktif — hedef tablo: public.app_logs");
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "app_logs tablosu hazırlanamadı; loglar yalnızca Console'a yazılır");
+        }
+    }
 
     // İstisna yakalama middleware'i ilk sırada — alt katmanlardaki tüm hataları
     // ApiResponse formatında dönmek ve loglamak için.
@@ -127,8 +141,18 @@ finally
 // ---------------------------------------------------------------------------
 // Serilog yapılandırması — Console + PostgreSQL DB sink
 // ---------------------------------------------------------------------------
-static void ConfigureSerilog(WebApplicationBuilder builder, string connectionString, bool useInMemoryDb)
+static void ConfigureSerilog(
+    WebApplicationBuilder builder,
+    string connectionString,
+    bool useInMemoryDb,
+    IHostEnvironment environment)
 {
+    if (environment.IsDevelopment())
+    {
+        // Sink hatalarını stderr'e yazar (Visual Studio / terminal).
+        Serilog.Debugging.SelfLog.Enable(msg => Console.Error.WriteLine($"[Serilog SelfLog] {msg}"));
+    }
+
     var loggerConfig = new LoggerConfiguration()
         .ReadFrom.Configuration(builder.Configuration)
         .Enrich.FromLogContext()
@@ -138,7 +162,7 @@ static void ConfigureSerilog(WebApplicationBuilder builder, string connectionStr
     // Test ortamı (InMemory DB) → yalnızca Console (DB sink kullanılmaz)
     if (!useInMemoryDb && !string.IsNullOrWhiteSpace(connectionString))
     {
-        // app_logs tablosu sütunları — yapılandırılmış log alanları
+        // app_logs tablosu sütunları — migration + EnsureAppLogsTableAsync ile oluşturulur
         var columnWriters = new Dictionary<string, ColumnWriterBase>(StringComparer.OrdinalIgnoreCase)
         {
             { "timestamp", new TimestampColumnWriter(NpgsqlDbType.TimestampTz) },
@@ -150,23 +174,24 @@ static void ConfigureSerilog(WebApplicationBuilder builder, string connectionStr
             { "user_id", new SinglePropertyColumnWriter("UserId", PropertyWriteMethod.Raw, NpgsqlDbType.Varchar) },
             { "user_name", new SinglePropertyColumnWriter("UserName", PropertyWriteMethod.Raw, NpgsqlDbType.Varchar) },
             { "source_context", new SinglePropertyColumnWriter("SourceContext", PropertyWriteMethod.Raw, NpgsqlDbType.Varchar) },
-            { "properties", new LogEventSerializedColumnWriter(NpgsqlDbType.Jsonb) },
+            { "properties", new PropertiesColumnWriter(NpgsqlDbType.Jsonb) },
         };
 
         loggerConfig.WriteTo.PostgreSQL(
             connectionString: connectionString,
             tableName: "app_logs",
             columnOptions: columnWriters,
-            needAutoCreateTable: true,
+            needAutoCreateTable: false,
             useCopy: false,
             schemaName: "public",
             restrictedToMinimumLevel: LogEventLevel.Information,
-            batchSizeLimit: 50,
-            period: TimeSpan.FromSeconds(5));
+            batchSizeLimit: 30,
+            period: TimeSpan.FromSeconds(2),
+            failureCallback: ex => Console.Error.WriteLine($"[Serilog.PostgreSQL] Yazma hatası: {ex}"));
     }
 
     Log.Logger = loggerConfig.CreateLogger();
-    builder.Host.UseSerilog();
+    builder.Host.UseSerilog(dispose: true);
 }
 
 /// <summary>WebApplicationFactory (integration test) için.</summary>

@@ -15,6 +15,7 @@ public sealed class DatabaseInitializerHostedService(
             var cs = ConnectionStringResolver.Resolve(configuration);
             await DatabaseBootstrap.PrepareAsync(cs, logger);
             await host.ApplyMigrationsAsync();
+            await DatabaseBootstrap.EnsureAppLogsTableAsync(cs, logger);
             await host.SeedDatabaseAsync();
             logger.LogInformation("Veritabanı migration ve seed tamamlandı.");
         }

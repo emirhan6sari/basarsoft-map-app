@@ -41,6 +41,39 @@ public static class DatabaseBootstrap
         }
     }
 
+    /// <summary>
+    /// Serilog PostgreSQL sink için <c>app_logs</c> tablosunu oluşturur (yoksa).
+    /// API istek kabul etmeden önce çağrılmalı — aksi halde sink sessizce başarısız olabilir.
+    /// </summary>
+    public static async Task EnsureAppLogsTableAsync(string connectionString, ILogger? logger = null)
+    {
+        const string sql = """
+            CREATE TABLE IF NOT EXISTS app_logs (
+                timestamp timestamptz NOT NULL,
+                level character varying(50) NOT NULL,
+                message text NULL,
+                message_template text NULL,
+                exception text NULL,
+                trace_id character varying(256) NULL,
+                user_id character varying(256) NULL,
+                user_name character varying(256) NULL,
+                source_context character varying(500) NULL,
+                properties jsonb NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS "IX_app_logs_timestamp" ON app_logs (timestamp DESC);
+            CREATE INDEX IF NOT EXISTS "IX_app_logs_trace_id" ON app_logs (trace_id)
+                WHERE trace_id IS NOT NULL;
+            """;
+
+        await using var dataSource = NpgsqlConnectionHelper.CreateDataSource(connectionString);
+        await using var conn = await dataSource.OpenConnectionAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = sql;
+        await cmd.ExecuteNonQueryAsync();
+        logger?.LogInformation("app_logs tablosu hazır (Serilog PostgreSQL sink).");
+    }
+
     public static async Task<bool> PingAsync(string connectionString, CancellationToken cancellationToken = default)
     {
         await using var dataSource = NpgsqlConnectionHelper.CreateDataSource(connectionString);
