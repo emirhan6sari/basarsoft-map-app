@@ -157,6 +157,7 @@ function MapView({ activeMode, onModeConsumed }) {
   const [selectedPoint, setSelectedPoint] = useState(null);
   const [warnOpen, setWarnOpen] = useState(false);
   const [warnText, setWarnText] = useState('');
+  const [confirmProximityForAdd, setConfirmProximityForAdd] = useState(false);
   const pendingAfterWarnRef = useRef(null);
 
   const [layersPanelOpen, setLayersPanelOpen] = useState(false);
@@ -947,6 +948,7 @@ function MapView({ activeMode, onModeConsumed }) {
         );
         setWarnOpen(true);
       } else {
+        setConfirmProximityForAdd(false);
         setPendingCoord(coord4326);
         setModalOpen(true);
       }
@@ -961,6 +963,7 @@ function MapView({ activeMode, onModeConsumed }) {
 
   const handleWarnConfirm = () => {
     setWarnOpen(false);
+    setConfirmProximityForAdd(true);
     setPendingCoord(pendingAfterWarnRef.current);
     setModalOpen(true);
     pendingAfterWarnRef.current = null;
@@ -1002,6 +1005,7 @@ function MapView({ activeMode, onModeConsumed }) {
   const handleModalClose = () => {
     setModalOpen(false);
     setPendingCoord(null);
+    setConfirmProximityForAdd(false);
   };
 
   const handlePointUpdated = (dto, previous) => {
@@ -1209,6 +1213,7 @@ function MapView({ activeMode, onModeConsumed }) {
       <AddPointModal
         open={modalOpen}
         coordinate={pendingCoord}
+        confirmProximityWarning={confirmProximityForAdd}
         onCreated={handleCreated}
         onClose={handleModalClose}
       />

@@ -102,7 +102,8 @@ public class MapPointService : IMapPointService
     public async Task<MapPointResponseDto> CreateAsync(MapPointCreateDto dto, Guid createdByUserId, CancellationToken cancellationToken = default)
     {
         var coords = _coordinates.Resolve(dto.Longitude, dto.Latitude, dto.XMercator, dto.YMercator);
-        await EnsureNotTooCloseAsync(coords.XMercator, coords.YMercator, excludeId: null, cancellationToken);
+        if (!dto.ConfirmProximityWarning)
+            await EnsureNotTooCloseAsync(coords.XMercator, coords.YMercator, excludeId: null, cancellationToken);
 
         var entity = new MapPoint
         {
@@ -129,7 +130,8 @@ public class MapPointService : IMapPointService
         EnsureCanModify(entity, requestingUserId, isAdmin);
 
         var coords = _coordinates.Resolve(dto.Longitude, dto.Latitude, dto.XMercator, dto.YMercator);
-        await EnsureNotTooCloseAsync(coords.XMercator, coords.YMercator, excludeId: id, cancellationToken);
+        if (!dto.ConfirmProximityWarning)
+            await EnsureNotTooCloseAsync(coords.XMercator, coords.YMercator, excludeId: id, cancellationToken);
 
         entity.Name = dto.Name.Trim();
         entity.Number = dto.Number.Trim();

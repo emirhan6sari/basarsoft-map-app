@@ -10,10 +10,11 @@ import {
 } from '@mui/material';
 
 import { createMapPoint } from '../api/mapPoints';
+import { withProximityConfirm } from '../utils/proximityConfirm';
 import { fetchCategories } from '../api/categories';
 import { fmt4326, fmt3857 } from '../utils/coordinateTransform';
 
-function AddPointModal({ open, coordinate, onCreated, onClose }) {
+function AddPointModal({ open, coordinate, confirmProximityWarning = false, onCreated, onClose }) {
   const [name, setName]             = useState('');
   const [number, setNumber]         = useState('');
   const [description, setDescription] = useState('');
@@ -59,7 +60,7 @@ function AddPointModal({ open, coordinate, onCreated, onClose }) {
 
     setSubmitting(true); setError(null);
     try {
-      const created = await createMapPoint({
+      const payload = {
         name:        name.trim(),
         number:      number.trim(),
         description: description.trim() || undefined,
@@ -68,7 +69,9 @@ function AddPointModal({ open, coordinate, onCreated, onClose }) {
         latitude:    coordinate.latitude,
         xMercator:   coordinate.xMercator,
         yMercator:   coordinate.yMercator,
-      });
+        confirmProximityWarning,
+      };
+      const created = await withProximityConfirm(createMapPoint, payload);
       onCreated(created);
       onClose();
     } catch (err) {

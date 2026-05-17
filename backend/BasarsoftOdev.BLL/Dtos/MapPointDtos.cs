@@ -10,6 +10,9 @@ public class MapPointCreateDto
     public double? Latitude { get; set; }
     public double? XMercator { get; set; }
     public double? YMercator { get; set; }
+
+    /// <summary>Yakınlık uyarısı sonrası kullanıcı onayladıysa true — ikinci istekte kayıt yapılır.</summary>
+    public bool ConfirmProximityWarning { get; set; }
 }
 
 public class MapPointUpdateDto : MapPointCreateDto;

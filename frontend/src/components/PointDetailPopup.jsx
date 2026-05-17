@@ -22,6 +22,7 @@ import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import SaveIcon from '@mui/icons-material/Save';
 
 import { updateMapPoint, deleteMapPoint } from '../api/mapPoints';
+import { withProximityConfirm } from '../utils/proximityConfirm';
 import { isAdmin } from '../api/auth';
 import { getCategoryColor } from '../utils/mapPointStyles';
 import { fmt4326, fmt3857 } from '../utils/coordinateTransform';
@@ -97,7 +98,7 @@ export default function PointDetailPopup({
     setSubmitting(true);
     setError(null);
     try {
-      const updated = await updateMapPoint(point.id, {
+      const payload = {
         name: name.trim(),
         number: number.trim(),
         description: description.trim() || undefined,
@@ -106,7 +107,11 @@ export default function PointDetailPopup({
         latitude: point.latitude,
         xMercator: point.xMercator,
         yMercator: point.yMercator,
-      });
+      };
+      const updated = await withProximityConfirm(
+        (body) => updateMapPoint(point.id, body),
+        payload,
+      );
       onUpdated?.(updated);
       setEditing(false);
     } catch (err) {

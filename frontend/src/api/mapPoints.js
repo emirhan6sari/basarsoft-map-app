@@ -46,13 +46,21 @@ export async function listMapPoints(bbox = null, options = {}) {
 }
 
 export async function createMapPoint(payload) {
-  const response = await apiClient.post(RESOURCE, payload);
-  return unwrap(response);
+  try {
+    const response = await apiClient.post(RESOURCE, payload);
+    return unwrap(response);
+  } catch (error) {
+    throw parseApiError(error);
+  }
 }
 
 export async function updateMapPoint(id, payload) {
-  const response = await apiClient.put(`${RESOURCE}/${id}`, payload);
-  return unwrap(response);
+  try {
+    const response = await apiClient.put(`${RESOURCE}/${id}`, payload);
+    return unwrap(response);
+  } catch (error) {
+    throw parseApiError(error);
+  }
 }
 
 export async function getMapPoint(id) {
