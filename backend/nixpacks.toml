@@ -1,0 +1,11 @@
+# Dockerfile yoksa Nixpacks ile derleme (root = backend)
+[phases.setup]
+nixPkgs = ["dotnet-sdk_9"]
+
+[phases.build]
+cmds = [
+  "dotnet publish BasarsoftOdev.Api/BasarsoftOdev.Api.csproj -c Release -o /app"
+]
+
+[start]
+cmd = "dotnet /app/BasarsoftOdev.Api.dll"

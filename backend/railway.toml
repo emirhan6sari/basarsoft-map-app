@@ -1,0 +1,9 @@
+# Railway servis kök dizini: backend (backend/BasarsoftOdev.Api DEĞİL)
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+healthcheckPath = "/health/db"
+healthcheckTimeout = 120
+restartPolicyType = "ON_FAILURE"
