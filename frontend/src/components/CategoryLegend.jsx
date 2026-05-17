@@ -9,7 +9,7 @@ import {
 import LabelIcon from '@mui/icons-material/Label';
 import { getCategoryStyleMeta } from '../utils/mapPointStyles';
 
-export default function CategoryLegend({ visible, categories = [] }) {
+export default function CategoryLegend({ visible, categories = [], top = 72 }) {
   const [open, setOpen] = useState(false);
 
   if (!visible || categories.length === 0) return null;
@@ -22,7 +22,7 @@ export default function CategoryLegend({ visible, categories = [] }) {
       <Box
         sx={{
           position: 'absolute',
-          top: 72,
+          top,
           left: 12,
           zIndex: 1000,
           minWidth: open ? 200 : 'auto',

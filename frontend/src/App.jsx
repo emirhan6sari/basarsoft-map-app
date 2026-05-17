@@ -7,13 +7,17 @@ import AddLocationAltIcon    from '@mui/icons-material/AddLocationAlt';
 import TableChartIcon        from '@mui/icons-material/TableChart';
 import LayersIcon            from '@mui/icons-material/Layers';
 import TravelExploreIcon     from '@mui/icons-material/TravelExplore';
+import UploadFileIcon        from '@mui/icons-material/UploadFile';
+import StraightenIcon        from '@mui/icons-material/Straighten';
 
 import MapView      from './components/MapView';
 import LoginOverlay from './components/LoginOverlay';
-import { isAuthenticated } from './api/auth';
+import { isAuthenticated, restoreSession } from './api/auth';
 
 const MENU_ITEMS = [
   { mode: 'addPoint',    label: 'Nokta Ekle',     Icon: AddLocationAltIcon },
+  { mode: 'import',      label: 'İçe Aktar',      Icon: UploadFileIcon },
+  { mode: 'measure',     label: 'Ölçüm',          Icon: StraightenIcon },
   { mode: 'queryPoints', label: 'Sorgula',        Icon: TableChartIcon },
   { mode: 'spatial',     label: 'Mekansal Sorgu', Icon: TravelExploreIcon },
   { mode: 'layers',      label: 'Katmanlar',      Icon: LayersIcon },
@@ -40,6 +44,20 @@ function App() {
 
   const handleAuthChange = useCallback(() => {
     setAuthKey(k => k + 1);
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    restoreSession().then((ok) => {
+      if (alive && ok) setAuthKey((k) => k + 1);
+    });
+    return () => { alive = false; };
+  }, []);
+
+  useEffect(() => {
+    const onSessionExpired = () => setAuthKey((k) => k + 1);
+    window.addEventListener('auth:session-expired', onSessionExpired);
+    return () => window.removeEventListener('auth:session-expired', onSessionExpired);
   }, []);
 
   useEffect(() => {
@@ -102,7 +120,7 @@ function App() {
 
       {/* SAĞ ÜST: Giriş / Profil */}
       <Box sx={{ position: 'absolute', top: 12, right: 12, zIndex: 1100 }}>
-        <LoginOverlay onAuthChange={handleAuthChange} />
+        <LoginOverlay onAuthChange={handleAuthChange} authRevision={authKey} />
       </Box>
     </Box>
   );

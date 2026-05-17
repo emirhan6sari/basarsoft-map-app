@@ -25,13 +25,19 @@ import DragBox from 'ol/interaction/DragBox';
 
 import { useOpenLayersMap } from '../hooks/useOpenLayersMap';
 import CoordinateBox from './CoordinateBox';
+import MapZoomLabel from './MapZoomLabel';
 import LayersPanel from './LayersPanel';
 import AddPointModal from './AddPointModal';
+import ImportGeometryModal from './ImportGeometryModal';
 import QueryPointsModal from './QueryPointsModal';
 import PointDetailPopup from './PointDetailPopup';
 import CategoryLegend from './CategoryLegend';
 import SpatialQueryToolbar from './SpatialQueryToolbar';
+import MeasurementToolbar from './MeasurementToolbar';
+import MeasurementResultPanel from './MeasurementResultPanel';
+import UndoRedoControls from './UndoRedoControls';
 import BufferDistanceDialog from './BufferDistanceDialog';
+import { useMapPointHistory } from '../hooks/useMapPointHistory';
 import { listMapPoints } from '../api/mapPoints';
 import { fetchCategories } from '../api/categories';
 import { isAuthenticated } from '../api/auth';
@@ -50,6 +56,17 @@ import {
 } from '../utils/spatialQuery';
 import { coordinateSetFrom3857 } from '../utils/coordinateTransform';
 import { setupAuxiliaryLayers } from '../layers/setupAuxiliaryLayers';
+import { createMeasureStyleFunction } from '../utils/measureStyles';
+import { measureGeometry } from '../utils/measureFormat';
+import { bboxFromMap } from '../utils/mapBbox';
+import {
+  MIN_ZOOM_FOR_POINT_LOAD,
+  resolveBboxLoadLimit,
+  resolveClusterDistance,
+} from '../utils/mapPerformance';
+import { unByKey } from 'ol/Observable';
+
+const BBOX_RELOAD_DEBOUNCE_MS = 350;
 
 const PROXIMITY_THRESHOLD_M = 50;
 
@@ -57,6 +74,11 @@ const SPATIAL_HINTS = {
   spatialBuffer: 'Buffer merkezi için haritaya tıklayın • İptal: Esc',
   spatialBox: 'Dikdörtgen alan çizmek için sürükleyin • İptal: Esc',
   spatialPolygon: 'Poligon çizmek için tıklayın; bitirmek için çift tıklayın • İptal: Esc',
+};
+
+const MEASURE_HINTS = {
+  measureLength: 'Uzunluk için çizgi çizin; bitirmek için çift tıklayın • Esc: iptal',
+  measureArea: 'Alan için poligon çizin; bitirmek için çift tıklayın • Esc: iptal',
 };
 
 function isEditableTarget(target) {
@@ -116,12 +138,16 @@ function MapView({ activeMode, onModeConsumed }) {
   const [categories, setCategories] = useState([]);
 
   const vectorSourceRef = useRef(null);
+  const clusterSourceRef = useRef(null);
   const highlightSourceRef = useRef(null);
   const querySourceRef = useRef(null);
+  const measureSourceRef = useRef(null);
   const pointsDataRef = useRef([]);
   const drawInteractionRef = useRef(null);
+  const measureDrawInteractionRef = useRef(null);
 
   const [modalOpen, setModalOpen] = useState(false);
+  const [importModalOpen, setImportModalOpen] = useState(false);
   const [pendingCoord, setPendingCoord] = useState(null);
   const [queryOpen, setQueryOpen] = useState(false);
   const [spatialResults, setSpatialResults] = useState(null);
@@ -139,6 +165,78 @@ function MapView({ activeMode, onModeConsumed }) {
   const [bufferDialogOpen, setBufferDialogOpen] = useState(false);
   const [bufferCenter, setBufferCenter] = useState(null);
   const [bufferCenterLabel, setBufferCenterLabel] = useState('');
+
+  const [measureOpen, setMeasureOpen] = useState(false);
+  const [measureMode, setMeasureMode] = useState(null);
+  const [measureLive, setMeasureLive] = useState(null);
+  const [measureResult, setMeasureResult] = useState(null);
+  const [measureFeatureCount, setMeasureFeatureCount] = useState(0);
+  const [historyError, setHistoryError] = useState(null);
+  const [pointsLoading, setPointsLoading] = useState(false);
+  const [pointsLoadMeta, setPointsLoadMeta] = useState(null);
+  const [mapZoom, setMapZoom] = useState(null);
+
+  const selectedPointRef = useRef(null);
+  selectedPointRef.current = selectedPoint;
+
+  const upsertPointOnMap = useCallback((dto) => {
+    const source = vectorSourceRef.current;
+    if (!source) return;
+    const existing = source.getFeatureById(dto.id);
+    if (existing) source.removeFeature(existing);
+    source.addFeature(dtoToFeature(dto));
+    const idx = pointsDataRef.current.findIndex((p) => p.id === dto.id);
+    if (idx >= 0) {
+      pointsDataRef.current = [
+        ...pointsDataRef.current.slice(0, idx),
+        dto,
+        ...pointsDataRef.current.slice(idx + 1),
+      ];
+    } else {
+      pointsDataRef.current = [...pointsDataRef.current, dto];
+    }
+    map?.getLayers().getArray().find((l) => l.get('title') === 'Noktalar')?.changed();
+  }, [map]);
+
+  const replaceAllPointsOnMap = useCallback((list) => {
+    const source = vectorSourceRef.current;
+    if (!source) return;
+    source.clear();
+    const dtos = list ?? [];
+    source.addFeatures(dtos.map(dtoToFeature));
+    pointsDataRef.current = dtos;
+    map?.getLayers().getArray().find((l) => l.get('title') === 'Noktalar')?.changed();
+  }, [map]);
+
+  const removePointFromMap = useCallback((id) => {
+    const source = vectorSourceRef.current;
+    const existing = source?.getFeatureById(id);
+    if (existing) source.removeFeature(existing);
+    pointsDataRef.current = pointsDataRef.current.filter((p) => p.id !== id);
+    highlightSourceRef.current?.clear();
+    if (selectedPointRef.current?.id === id) {
+      setDetailOpen(false);
+      setSelectedPoint(null);
+    }
+    map?.getLayers().getArray().find((l) => l.get('title') === 'Noktalar')?.changed();
+  }, [map]);
+
+  const handleHistorySync = useCallback((event) => {
+    if (event.op === 'add' || event.op === 'update') {
+      upsertPointOnMap(event.point);
+      if (selectedPointRef.current?.id === event.point.id) {
+        setSelectedPoint(event.point);
+      }
+    } else if (event.op === 'remove') {
+      removePointFromMap(event.id);
+    } else if (event.op === 'batchAdd') {
+      event.points.forEach((p) => upsertPointOnMap(p));
+    } else if (event.op === 'batchRemove') {
+      event.ids.forEach((id) => removePointFromMap(id));
+    }
+  }, [upsertPointOnMap, removePointFromMap]);
+
+  const history = useMapPointHistory({ onSync: handleHistorySync });
 
   const clearQueryLayer = useCallback(() => {
     querySourceRef.current?.clear();
@@ -187,10 +285,41 @@ function MapView({ activeMode, onModeConsumed }) {
     highlightSourceRef.current?.clear();
   }, [clearQueryLayer]);
 
+  const clearMeasureLayer = useCallback(() => {
+    measureSourceRef.current?.clear();
+    setMeasureFeatureCount(0);
+    setMeasureLive(null);
+    setMeasureResult(null);
+  }, []);
+
+  const handleMeasureClose = useCallback(() => {
+    setMeasureOpen(false);
+    setMeasureMode(null);
+    setMeasureLive(null);
+  }, []);
+
+  const handleMeasureToolSelect = useCallback((mode) => {
+    setMeasureMode(mode);
+    setMeasureLive(null);
+  }, []);
+
+  const cancelMeasureTool = useCallback(() => {
+    setMeasureMode(null);
+    setMeasureLive(null);
+  }, []);
+
+  const syncMeasureFeatureCount = useCallback(() => {
+    setMeasureFeatureCount(measureSourceRef.current?.getFeatures().length ?? 0);
+  }, []);
+
   const cancelCurrentOperation = useCallback(() => {
     if (bufferDialogOpen) {
       setBufferDialogOpen(false);
       setBufferCenter(null);
+      return true;
+    }
+    if (importModalOpen) {
+      setImportModalOpen(false);
       return true;
     }
     if (modalOpen) {
@@ -215,6 +344,21 @@ function MapView({ activeMode, onModeConsumed }) {
       setSelectedPoint(null);
       return true;
     }
+    if (measureMode && measureDrawInteractionRef.current) {
+      const draw = measureDrawInteractionRef.current;
+      if (hasActiveDrawSketch(draw)) {
+        draw.abortDrawing();
+        return true;
+      }
+    }
+    if (measureMode) {
+      cancelMeasureTool();
+      return true;
+    }
+    if (measureOpen) {
+      handleMeasureClose();
+      return true;
+    }
     if (spatialMode === 'spatialPolygon' && drawInteractionRef.current) {
       const draw = drawInteractionRef.current;
       if (hasActiveDrawSketch(draw)) {
@@ -237,13 +381,18 @@ function MapView({ activeMode, onModeConsumed }) {
     return false;
   }, [
     bufferDialogOpen,
+    importModalOpen,
     modalOpen,
     warnOpen,
     queryOpen,
     detailOpen,
+    measureMode,
+    measureOpen,
     spatialMode,
     spatialOpen,
     activeMode,
+    cancelMeasureTool,
+    handleMeasureClose,
     cancelSpatialTool,
     handleSpatialClose,
     onModeConsumed,
@@ -264,6 +413,41 @@ function MapView({ activeMode, onModeConsumed }) {
     window.addEventListener('keydown', onKeyDown, true);
     return () => window.removeEventListener('keydown', onKeyDown, true);
   }, [cancelCurrentOperation]);
+
+  // -------------------------------------------------------------------
+  // Undo / Redo — Ctrl+Z / Ctrl+Y
+  // -------------------------------------------------------------------
+  useEffect(() => {
+    if (!loggedIn) return;
+
+    const onKeyDown = (e) => {
+      if (isEditableTarget(e.target)) return;
+      const mod = e.ctrlKey || e.metaKey;
+      if (!mod) return;
+
+      const isRedo = e.key === 'y' || (e.key === 'z' && e.shiftKey);
+      const isUndo = e.key === 'z' && !e.shiftKey;
+      if (!isUndo && !isRedo) return;
+
+      e.preventDefault();
+      setHistoryError(null);
+      const action = isRedo ? history.redo : history.undo;
+      action().catch((err) => setHistoryError(err.message ?? 'İşlem uygulanamadı.'));
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [loggedIn, history.undo, history.redo]);
+
+  const handleHistoryUndo = () => {
+    setHistoryError(null);
+    history.undo().catch((err) => setHistoryError(err.message ?? 'Geri alınamadı.'));
+  };
+
+  const handleHistoryRedo = () => {
+    setHistoryError(null);
+    history.redo().catch((err) => setHistoryError(err.message ?? 'Yineleme başarısız.'));
+  };
 
   // -------------------------------------------------------------------
   // Yardımcı GeoJSON katmanları (il / ilçe / örnek polygon)
@@ -287,6 +471,7 @@ function MapView({ activeMode, onModeConsumed }) {
       ...CLUSTER_OPTIONS,
       source: vectorSource,
     });
+    clusterSourceRef.current = clusterSource;
 
     const pointsLayer = new VectorLayer({
       source: clusterSource,
@@ -316,38 +501,139 @@ function MapView({ activeMode, onModeConsumed }) {
     queryLayer.set('title', 'Mekansal Sorgu');
     map.addLayer(queryLayer);
 
-    let cancelled = false;
-    const authenticated = isAuthenticated();
-    setLoggedIn(authenticated);
-
-    if (authenticated) {
-      Promise.all([listMapPoints(), fetchCategories()])
-        .then(([dtos, cats]) => {
-          if (cancelled) return;
-          const list = dtos ?? [];
-          pointsDataRef.current = list;
-          const categoryList = cats ?? [];
-          registerCategories(categoryList);
-          setCategories(categoryList);
-          vectorSource.addFeatures(list.map(dtoToFeature));
-          map.getLayers().getArray()
-            .find((l) => l.get('title') === 'Noktalar')
-            ?.changed();
-        })
-        .catch((err) => console.error('Harita verisi yüklenemedi:', err));
-    } else {
+    setLoggedIn(isAuthenticated());
+    if (!isAuthenticated()) {
       pointsDataRef.current = [];
     }
 
     return () => {
-      cancelled = true;
       map.removeLayer(pointsLayer);
       map.removeLayer(hlLayer);
       map.removeLayer(queryLayer);
       vectorSourceRef.current = null;
+      clusterSourceRef.current = null;
       highlightSourceRef.current = null;
       querySourceRef.current = null;
       pointsDataRef.current = [];
+    };
+  }, [map]);
+
+  useEffect(() => {
+    const onSessionExpired = () => {
+      setLoggedIn(false);
+      pointsDataRef.current = [];
+      replaceAllPointsOnMap([]);
+    };
+    window.addEventListener('auth:session-expired', onSessionExpired);
+    return () => window.removeEventListener('auth:session-expired', onSessionExpired);
+  }, [replaceAllPointsOnMap]);
+
+  // -------------------------------------------------------------------
+  // Kategoriler (bir kez)
+  // -------------------------------------------------------------------
+  useEffect(() => {
+    if (!loggedIn) return;
+    let cancelled = false;
+    fetchCategories()
+      .then((cats) => {
+        if (cancelled) return;
+        const categoryList = cats ?? [];
+        registerCategories(categoryList);
+        setCategories(categoryList);
+      })
+      .catch((err) => console.error('Kategoriler yüklenemedi:', err));
+    return () => { cancelled = true; };
+  }, [loggedIn]);
+
+  // -------------------------------------------------------------------
+  // Bbox ile nokta yükleme (moveend + debounce)
+  // -------------------------------------------------------------------
+  useEffect(() => {
+    if (!map || !loggedIn) return;
+
+    let debounceTimer = null;
+    let abortController = null;
+
+    const reloadPoints = () => {
+      const bbox = bboxFromMap(map);
+      if (!bbox) return;
+
+      const zoom = map.getView().getZoom() ?? 0;
+      const loadLimit = resolveBboxLoadLimit(zoom);
+
+      if (loadLimit === 0) {
+        if (abortController) abortController.abort();
+        replaceAllPointsOnMap([]);
+        setPointsLoadMeta({ type: 'zoom', minZoom: MIN_ZOOM_FOR_POINT_LOAD });
+        setPointsLoading(false);
+        return;
+      }
+
+      if (abortController) abortController.abort();
+      abortController = new AbortController();
+
+      setPointsLoading(true);
+      listMapPoints(bbox, { signal: abortController.signal, limit: loadLimit })
+        .then((result) => {
+          if (abortController?.signal.aborted) return;
+          const items = result?.items ?? [];
+          replaceAllPointsOnMap(items);
+
+          const cluster = clusterSourceRef.current;
+          if (cluster) {
+            cluster.setDistance(resolveClusterDistance(zoom, items.length));
+          }
+
+          if (result?.truncated) {
+            setPointsLoadMeta({
+              type: 'truncated',
+              returnedCount: result.returnedCount,
+              totalCount: result.totalCount,
+              maxResults: result.maxResults,
+            });
+          } else {
+            setPointsLoadMeta(null);
+          }
+        })
+        .catch((err) => {
+          if (err?.code === 'ERR_CANCELED' || err?.name === 'CanceledError') return;
+          console.error('Harita noktaları yüklenemedi:', err);
+        })
+        .finally(() => {
+          if (!abortController?.signal.aborted) setPointsLoading(false);
+        });
+    };
+
+    const scheduleReload = () => {
+      window.clearTimeout(debounceTimer);
+      debounceTimer = window.setTimeout(reloadPoints, BBOX_RELOAD_DEBOUNCE_MS);
+    };
+
+    reloadPoints();
+    map.on('moveend', scheduleReload);
+
+    return () => {
+      window.clearTimeout(debounceTimer);
+      if (abortController) abortController.abort();
+      map.un('moveend', scheduleReload);
+    };
+  }, [map, loggedIn, replaceAllPointsOnMap]);
+
+  // -------------------------------------------------------------------
+  // Zoom seviyesi gösterimi (+/- yanında)
+  // -------------------------------------------------------------------
+  useEffect(() => {
+    if (!map) return;
+
+    const syncZoom = () => setMapZoom(map.getView().getZoom() ?? 0);
+    syncZoom();
+    map.on('moveend', syncZoom);
+    const view = map.getView();
+    view.on('change:resolution', syncZoom);
+
+    return () => {
+      map.un('moveend', syncZoom);
+      view.un('change:resolution', syncZoom);
     };
   }, [map]);
 
@@ -406,13 +692,21 @@ function MapView({ activeMode, onModeConsumed }) {
       setLayersPanelOpen(true);
       onModeConsumed?.();
     }
+    if (activeMode === 'import') {
+      setImportModalOpen(true);
+      onModeConsumed?.();
+    }
+    if (activeMode === 'measure') {
+      setMeasureOpen(true);
+      onModeConsumed?.();
+    }
   }, [activeMode, onModeConsumed]);
 
   // -------------------------------------------------------------------
   // Noktaya tıklama → detay popup
   // -------------------------------------------------------------------
   useEffect(() => {
-    if (!map || activeMode === 'addPoint' || spatialMode || !loggedIn) return;
+    if (!map || activeMode === 'addPoint' || spatialMode || measureMode || !loggedIn) return;
 
     const onClick = (e) => {
       const clusterFeature = map.forEachFeatureAtPixel(
@@ -520,6 +814,86 @@ function MapView({ activeMode, onModeConsumed }) {
     };
   }, [map, spatialMode, loggedIn, highlightMultiple, openSpatialResults]);
 
+  // -------------------------------------------------------------------
+  // Ölçüm katmanı
+  // -------------------------------------------------------------------
+  useEffect(() => {
+    if (!map) return;
+
+    const measureSource = new VectorSource();
+    measureSourceRef.current = measureSource;
+
+    const measureLayer = new VectorLayer({
+      source: measureSource,
+      style: createMeasureStyleFunction(),
+      zIndex: 8,
+    });
+    measureLayer.set('title', 'Ölçüm');
+    map.addLayer(measureLayer);
+
+    return () => {
+      map.removeLayer(measureLayer);
+      measureSourceRef.current = null;
+    };
+  }, [map]);
+
+  // -------------------------------------------------------------------
+  // Ölçüm çizim etkileşimi
+  // -------------------------------------------------------------------
+  useEffect(() => {
+    if (!map || !measureMode) return;
+
+    const source = measureSourceRef.current;
+    if (!source) return;
+
+    const drawType = measureMode === 'measureLength' ? 'LineString' : 'Polygon';
+    const draw = new Draw({ source, type: drawType });
+    measureDrawInteractionRef.current = draw;
+
+    let geomListenerKey = null;
+
+    const onGeomChange = (geometry) => {
+      setMeasureLive(measureGeometry(geometry));
+    };
+
+    draw.on('drawstart', (evt) => {
+      const geometry = evt.feature.getGeometry();
+      onGeomChange(geometry);
+      geomListenerKey = geometry.on('change', () => onGeomChange(geometry));
+    });
+
+    draw.on('drawend', (evt) => {
+      if (geomListenerKey) {
+        unByKey(geomListenerKey);
+        geomListenerKey = null;
+      }
+      const measured = measureGeometry(evt.feature.getGeometry());
+      setMeasureResult(measured);
+      setMeasureLive(null);
+      syncMeasureFeatureCount();
+    });
+
+    draw.on('drawabort', () => {
+      if (geomListenerKey) {
+        unByKey(geomListenerKey);
+        geomListenerKey = null;
+      }
+      setMeasureLive(null);
+    });
+
+    const viewport = map.getViewport();
+    const prevCursor = viewport.style.cursor;
+    viewport.style.cursor = 'crosshair';
+    map.addInteraction(draw);
+
+    return () => {
+      measureDrawInteractionRef.current = null;
+      if (geomListenerKey) unByKey(geomListenerKey);
+      viewport.style.cursor = prevCursor;
+      map.removeInteraction(draw);
+    };
+  }, [map, measureMode, syncMeasureFeatureCount]);
+
   const handleBufferConfirm = (radiusM) => {
     setBufferDialogOpen(false);
     if (!bufferCenter || !querySourceRef.current) return;
@@ -598,9 +972,31 @@ function MapView({ activeMode, onModeConsumed }) {
   };
 
   const handleCreated = (dto) => {
-    vectorSourceRef.current?.addFeature(dtoToFeature(dto));
-    pointsDataRef.current = [...pointsDataRef.current, dto];
+    upsertPointOnMap(dto);
+    history.recordCreate(dto);
     onModeConsumed?.();
+  };
+
+  const handleImported = (result) => {
+    const list = result?.created ?? [];
+    if (!list.length) return;
+
+    list.forEach((dto) => upsertPointOnMap(dto));
+    history.recordBatchCreate(list);
+
+    if (map && list.length > 0) {
+      const coords = list.map((d) => fromLonLat([d.longitude, d.latitude]));
+      const xs = coords.map((c) => c[0]);
+      const ys = coords.map((c) => c[1]);
+      const pad = 8000;
+      const extent = [
+        Math.min(...xs) - pad,
+        Math.min(...ys) - pad,
+        Math.max(...xs) + pad,
+        Math.max(...ys) + pad,
+      ];
+      map.getView().fit(extent, { padding: [60, 60, 60, 60], maxZoom: 14, duration: 500 });
+    }
   };
 
   const handleModalClose = () => {
@@ -608,42 +1004,22 @@ function MapView({ activeMode, onModeConsumed }) {
     setPendingCoord(null);
   };
 
-  const upsertPointOnMap = (dto) => {
-    const source = vectorSourceRef.current;
-    if (!source) return;
-    const existing = source.getFeatureById(dto.id);
-    if (existing) source.removeFeature(existing);
-    source.addFeature(dtoToFeature(dto));
-    const idx = pointsDataRef.current.findIndex((p) => p.id === dto.id);
-    if (idx >= 0) {
-      pointsDataRef.current = [
-        ...pointsDataRef.current.slice(0, idx),
-        dto,
-        ...pointsDataRef.current.slice(idx + 1),
-      ];
-    } else {
-      pointsDataRef.current = [...pointsDataRef.current, dto];
-    }
-    map?.getLayers().getArray().find((l) => l.get('title') === 'Noktalar')?.changed();
-  };
-
-  const handlePointUpdated = (dto) => {
+  const handlePointUpdated = (dto, previous) => {
+    if (previous) history.recordUpdate(previous, dto);
     upsertPointOnMap(dto);
     setSelectedPoint(dto);
     handlePointSelect(dto);
   };
 
-  const handlePointDeleted = (id) => {
-    const source = vectorSourceRef.current;
-    const existing = source?.getFeatureById(id);
-    if (existing) source.removeFeature(existing);
-    pointsDataRef.current = pointsDataRef.current.filter((p) => p.id !== id);
-    highlightSourceRef.current?.clear();
-    setDetailOpen(false);
-    setSelectedPoint(null);
+  const handlePointDeleted = (id, snapshot) => {
+    if (snapshot) history.recordDelete(snapshot);
+    removePointFromMap(id);
   };
 
   const spatialHint = spatialMode ? SPATIAL_HINTS[spatialMode] : null;
+  const measureHint = measureMode ? MEASURE_HINTS[measureMode] : null;
+  const showZoomHint = loggedIn && pointsLoadMeta?.type === 'zoom' && !pointsLoading;
+  const categoryLegendTop = showZoomHint ? 118 : 72;
 
   return (
     <Box sx={{ position: 'relative', width: '100%', height: '100%' }}>
@@ -654,18 +1030,129 @@ function MapView({ activeMode, onModeConsumed }) {
       />
 
       <CoordinateBox pointerCoord={pointerCoord} clickCoord={clickCoord} />
+      {map && <MapZoomLabel zoom={mapZoom} />}
       <LayersPanel
         map={map}
         open={layersPanelOpen}
         onOpenChange={setLayersPanelOpen}
       />
-      <CategoryLegend visible={loggedIn} categories={categories} />
+      {showZoomHint && (
+        <Alert
+          severity="warning"
+          sx={{
+            position: 'absolute',
+            top: 52,
+            left: 12,
+            zIndex: 1002,
+            maxWidth: 300,
+            backgroundColor: 'rgba(255,255,255,0.96)',
+            boxShadow: 2,
+          }}
+        >
+          Noktaları görmek için haritayı yakınlaştırın (zoom ≥ {pointsLoadMeta.minZoom}).
+        </Alert>
+      )}
+
+      <CategoryLegend visible={loggedIn} categories={categories} top={categoryLegendTop} />
+
+      {loggedIn && pointsLoading && (
+        <Alert
+          severity="info"
+          sx={{
+            position: 'absolute',
+            bottom: 24,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 1090,
+            py: 0.25,
+            backgroundColor: 'rgba(255,255,255,0.92)',
+          }}
+        >
+          Noktalar yükleniyor…
+        </Alert>
+      )}
+
+      {loggedIn && pointsLoadMeta?.type === 'truncated' && !pointsLoading && (
+        <Alert
+          severity="warning"
+          onClose={() => setPointsLoadMeta(null)}
+          sx={{
+            position: 'absolute',
+            bottom: 24,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 1090,
+            maxWidth: '92vw',
+            backgroundColor: 'rgba(255,255,255,0.94)',
+          }}
+        >
+          Bu alanda {pointsLoadMeta.totalCount.toLocaleString('tr-TR')} nokta var;{' '}
+          {pointsLoadMeta.returnedCount.toLocaleString('tr-TR')} tanesi gösteriliyor (limit:{' '}
+          {pointsLoadMeta.maxResults.toLocaleString('tr-TR')}). Daha fazlası için yakınlaştırın.
+        </Alert>
+      )}
+
+      {loggedIn && (
+        <UndoRedoControls
+          canUndo={history.canUndo}
+          canRedo={history.canRedo}
+          busy={history.busy}
+          onUndo={handleHistoryUndo}
+          onRedo={handleHistoryRedo}
+        />
+      )}
+
+      {historyError && (
+        <Alert
+          severity="warning"
+          onClose={() => setHistoryError(null)}
+          sx={{
+            position: 'absolute',
+            bottom: 80,
+            right: 12,
+            zIndex: 1100,
+            maxWidth: 320,
+          }}
+        >
+          {historyError}
+        </Alert>
+      )}
 
       {spatialOpen && (
         <SpatialQueryToolbar
           onSelect={handleSpatialToolSelect}
           onClose={handleSpatialClose}
         />
+      )}
+
+      {measureOpen && (
+        <MeasurementToolbar
+          onSelect={handleMeasureToolSelect}
+          onClose={handleMeasureClose}
+          onClear={clearMeasureLayer}
+          featureCount={measureFeatureCount}
+        />
+      )}
+
+      <MeasurementResultPanel live={measureLive} result={measureResult} />
+
+      {measureHint && (
+        <Alert
+          severity="info"
+          onClose={() => cancelMeasureTool()}
+          sx={{
+            position: 'absolute',
+            top: 72,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 1100,
+            backgroundColor: 'rgba(255,255,255,0.96)',
+            boxShadow: 2,
+            maxWidth: '90vw',
+          }}
+        >
+          {measureHint}
+        </Alert>
       )}
 
       {spatialHint && (
@@ -726,6 +1213,12 @@ function MapView({ activeMode, onModeConsumed }) {
         onClose={handleModalClose}
       />
 
+      <ImportGeometryModal
+        open={importModalOpen}
+        onImported={handleImported}
+        onClose={() => setImportModalOpen(false)}
+      />
+
       <BufferDistanceDialog
         open={bufferDialogOpen}
         centerLabel={bufferCenterLabel}
@@ -743,6 +1236,7 @@ function MapView({ activeMode, onModeConsumed }) {
         }}
         onPointSelect={handlePointSelect}
         initialPoints={spatialResults}
+        bbox={spatialResults ? null : bboxFromMap(map)}
         title={spatialResultsTitle}
         resultHint={spatialResultsHint}
       />
@@ -755,8 +1249,8 @@ function MapView({ activeMode, onModeConsumed }) {
           setDetailOpen(false);
           setSelectedPoint(null);
         }}
-        onUpdated={handlePointUpdated}
-        onDeleted={handlePointDeleted}
+        onUpdated={(dto) => handlePointUpdated(dto, selectedPoint)}
+        onDeleted={(id) => handlePointDeleted(id, selectedPoint)}
       />
     </Box>
   );

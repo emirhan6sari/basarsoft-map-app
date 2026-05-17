@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import {
   Box, Paper, Stack, TextField, Button, IconButton, Avatar,
   Typography, InputAdornment, Divider, Tooltip, ClickAwayListener,
@@ -21,7 +21,7 @@ const emptyFieldErrors = () => ({
   displayName: '',
 });
 
-export default function LoginOverlay({ onAuthChange }) {
+export default function LoginOverlay({ onAuthChange, authRevision = 0 }) {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState(0);
   const [showPass, setShowPass] = useState(false);
@@ -37,6 +37,11 @@ export default function LoginOverlay({ onAuthChange }) {
   const [loggedIn, setLoggedIn] = useState(isAuthenticated);
   const [user, setUser] = useState(getStoredUser);
   const anchorRef = useRef(null);
+
+  useEffect(() => {
+    setLoggedIn(isAuthenticated());
+    setUser(getStoredUser());
+  }, [authRevision]);
 
   const resetForm = () => {
     setUserName('');
@@ -163,12 +168,17 @@ export default function LoginOverlay({ onAuthChange }) {
 
   const isUsernameConflict = errorCode === 'CONFLICT' && tab === 1;
 
-  const handleLogout = () => {
-    logout();
-    setLoggedIn(false);
-    setUser(null);
-    setOpen(false);
-    onAuthChange?.();
+  const handleLogout = async () => {
+    setLoading(true);
+    try {
+      await logout();
+    } finally {
+      setLoading(false);
+      setLoggedIn(false);
+      setUser(null);
+      setOpen(false);
+      onAuthChange?.();
+    }
   };
 
   const isAdmin = user?.roles?.includes('Admin');

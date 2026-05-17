@@ -1,0 +1,8 @@
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Host=localhost;Port=5432;Database=basarsoft_map;Username=postgres;Password=YOUR_PASSWORD"
+  },
+  "Jwt": {
+    "SecretKey": "basarsoft_basarsoft_basarsoft_basarsoft"
+  }
+}

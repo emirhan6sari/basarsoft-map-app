@@ -1,7 +1,7 @@
 ﻿/**
- * QueryPointsModal â€” Nokta Sorgulama ve Listeleme
+ * QueryPointsModal — Nokta Sorgulama ve Listeleme
  *
- * PrimeReact DataTable + client-side filtreleme (gÃ¼venilir, kontrollÃ¼).
+ * PrimeReact DataTable + client-side filtreleme.
  * Dropdown overlay'leri document.body'ye render edilir (MUI Dialog uyumu).
  */
 
@@ -14,12 +14,12 @@ import CloseIcon from '@mui/icons-material/Close';
 import MyLocationIcon from '@mui/icons-material/MyLocation';
 import FilterAltOffIcon from '@mui/icons-material/FilterAltOff';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
-import TableViewIcon from '@mui/icons-material/TableView';
+import TableViewIcon from '@mui/icons-material/TableChart';
 
 import { DataTable } from 'primereact/datatable';
-import { Column }    from 'primereact/column';
+import { Column } from 'primereact/column';
 import { InputText } from 'primereact/inputtext';
-import { Dropdown }  from 'primereact/dropdown';
+import { Dropdown } from 'primereact/dropdown';
 
 import 'primereact/resources/themes/lara-light-blue/theme.css';
 import 'primereact/resources/primereact.min.css';
@@ -31,13 +31,12 @@ import { fetchCategories } from '../api/categories';
 import { exportPointsGeoJSON, exportPointsCSV } from '../utils/pointExport';
 
 const OVERLAY_TARGET = typeof document !== 'undefined' ? document.body : null;
+const EM_DASH = '\u2014';
 
-// â”€â”€ YardÄ±mcÄ±lar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-const fmtCoord = (v) => (typeof v === 'number' ? v.toFixed(6) : 'â€”');
-const fmtMercator = (v) => (typeof v === 'number' ? v.toFixed(2) : 'â€”');
-const fmtDate  = (iso) => {
-  if (!iso) return 'â€”';
+const fmtCoord = (v) => (typeof v === 'number' ? v.toFixed(6) : EM_DASH);
+const fmtMercator = (v) => (typeof v === 'number' ? v.toFixed(2) : EM_DASH);
+const fmtDate = (iso) => {
+  if (!iso) return EM_DASH;
   return new Date(iso).toLocaleString('tr-TR', {
     day: '2-digit', month: '2-digit', year: 'numeric',
     hour: '2-digit', minute: '2-digit',
@@ -63,7 +62,7 @@ function normalizePoint(raw) {
 
 function filterPoints(rows, { name, number, category }) {
   const nameQ = name.trim().toLowerCase();
-  const numQ  = number.trim();
+  const numQ = number.trim();
 
   return rows.filter((row) => {
     if (nameQ && !row.name.toLowerCase().includes(nameQ)) return false;
@@ -73,31 +72,29 @@ function filterPoints(rows, { name, number, category }) {
   });
 }
 
-// â”€â”€ BileÅŸen â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
 export default function QueryPointsModal({
   open,
   onClose,
   onPointSelect,
   initialPoints = null,
+  bbox = null,
   title = 'Nokta Sorgulama',
   resultHint = null,
 }) {
-  const [rows, setRows]             = useState([]);
-  const [loading, setLoading]       = useState(false);
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(false);
   const [categories, setCategories] = useState([]);
   const [selectedRow, setSelectedRow] = useState(null);
   const [exportMsg, setExportMsg] = useState(null);
 
-  // Filtre state
-  const [nameFilter, setNameFilter]         = useState('');
-  const [numberFilter, setNumberFilter]     = useState('');
+  const [nameFilter, setNameFilter] = useState('');
+  const [numberFilter, setNumberFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState(null);
 
   const categoryOptions = useMemo(
     () => categories.map((c) => ({
-      label: c.displayName ?? c.name,
-      value: c.name,
+      label: c.displayName ?? c.DisplayName ?? c.name ?? c.Name,
+      value: c.name ?? c.Name,
     })),
     [categories],
   );
@@ -111,7 +108,6 @@ export default function QueryPointsModal({
     nameFilter.trim() || numberFilter.trim() || categoryFilter,
   );
 
-  // â”€â”€ Veri yÃ¼kleme â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     if (!open) return;
     let alive = true;
@@ -132,17 +128,22 @@ export default function QueryPointsModal({
       return () => { alive = false; };
     }
 
-    Promise.all([listMapPoints(), fetchCategories()])
-      .then(([points, cats]) => {
+    Promise.all([listMapPoints(bbox, { limit: 2500 }), fetchCategories()])
+      .then(([result, cats]) => {
         if (!alive) return;
-        setRows((points ?? []).map(normalizePoint));
+        setRows((result?.items ?? []).map(normalizePoint));
         setCategories(cats ?? []);
+        if (result?.truncated) {
+          setExportMsg(
+            `${result.returnedCount} / ${result.totalCount} kay\u0131t listelendi \u2014 daha fazlas\u0131 i\u00e7in haritada yak\u0131nla\u015ft\u0131r\u0131n.`,
+          );
+        }
       })
-      .catch((err) => console.error('Noktalar yÃ¼klenemedi:', err))
+      .catch((err) => console.error('Noktalar y\u00fcklenemedi:', err))
       .finally(() => { if (alive) setLoading(false); });
 
     return () => { alive = false; };
-  }, [open, initialPoints]);
+  }, [open, initialPoints, bbox]);
 
   const clearFilters = () => {
     setNameFilter('');
@@ -159,22 +160,24 @@ export default function QueryPointsModal({
     setExportMsg(null);
     const result = fn(filteredRows, categories);
     if (!result.ok) setExportMsg(result.message);
-    else setExportMsg(`${result.count} kayÄ±t dÄ±ÅŸa aktarÄ±ldÄ±.`);
+    else setExportMsg(`${result.count} kay\u0131t d\u0131\u015fa aktar\u0131ld\u0131.`);
   };
 
   const handleExportGeoJSON = () => runExport(exportPointsGeoJSON);
   const handleExportCSV = () => runExport(exportPointsCSV);
 
   const categoryBody = (row) => {
-    const cat = categories.find((c) => c.name === row.category);
-    return cat?.displayName ?? row.category ?? 'â€”';
+    const cat = categories.find((c) => (c.name ?? c.Name) === row.category);
+    return cat?.displayName ?? cat?.DisplayName ?? row.category ?? EM_DASH;
   };
 
-  const latBody  = (row) => fmtCoord(row.latitude);
-  const lonBody  = (row) => fmtCoord(row.longitude);
-  const xBody    = (row) => fmtMercator(row.xMercator);
-  const yBody    = (row) => fmtMercator(row.yMercator);
+  const latBody = (row) => fmtCoord(row.latitude);
+  const lonBody = (row) => fmtCoord(row.longitude);
+  const xBody = (row) => fmtMercator(row.xMercator);
+  const yBody = (row) => fmtMercator(row.yMercator);
   const dateBody = (row) => fmtDate(row.createdAt);
+
+  const defaultHint = `${filteredRows.length} / ${rows.length} kay\u0131t \u2022 Sat\u0131ra t\u0131klay\u0131n \u2192 haritada vurgula`;
 
   return (
     <Dialog
@@ -203,7 +206,7 @@ export default function QueryPointsModal({
         {selectedRow && (
           <Chip
             icon={<MyLocationIcon sx={{ fontSize: 16 }} />}
-            label={`SeÃ§ili: ${selectedRow.name}`}
+            label={`Se\u00e7ili: ${selectedRow.name}`}
             size="small"
             sx={{ bgcolor: '#80cbc4', color: '#004d40', fontWeight: 600 }}
           />
@@ -216,7 +219,6 @@ export default function QueryPointsModal({
 
       <DialogContent sx={{ p: 0 }}>
         <Box sx={{ px: 2, pb: 2, pt: 1 }}>
-          {/* â”€â”€ Filtre araÃ§ Ã§ubuÄŸu â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
           <div className="qp-filter-bar">
             <div className="qp-filter-field">
               <label htmlFor="qp-name-filter">Ad</label>
@@ -224,7 +226,7 @@ export default function QueryPointsModal({
                 id="qp-name-filter"
                 value={nameFilter}
                 onChange={(e) => setNameFilter(e.target.value)}
-                placeholder="Ä°sme gÃ¶re araâ€¦"
+                placeholder={'\u0130sme g\u00f6re ara\u2026'}
               />
             </div>
 
@@ -234,7 +236,7 @@ export default function QueryPointsModal({
                 id="qp-number-filter"
                 value={numberFilter}
                 onChange={(e) => setNumberFilter(e.target.value)}
-                placeholder="Numara araâ€¦"
+                placeholder={'Numara ara\u2026'}
               />
             </div>
 
@@ -245,7 +247,7 @@ export default function QueryPointsModal({
                 value={categoryFilter}
                 options={categoryOptions}
                 onChange={(e) => setCategoryFilter(e.value)}
-                placeholder="TÃ¼mÃ¼"
+                placeholder="T\u00fcm\u00fc"
                 showClear
                 appendTo={OVERLAY_TARGET}
                 panelClassName="qp-dropdown-panel"
@@ -289,22 +291,28 @@ export default function QueryPointsModal({
           </div>
 
           <Typography variant="caption" sx={{ color: '#607d8b', display: 'block', pb: 0.5 }}>
-            {resultHint ?? `${filteredRows.length} / ${rows.length} kayÄ±t`} â€¢ SatÄ±ra tÄ±klayÄ±n â†’ haritada vurgula
+            {resultHint ?? defaultHint}
             {exportMsg && (
-              <Box component="span" sx={{ display: 'block', color: exportMsg.includes('aktarÄ±ldÄ±') ? '#2e7d32' : '#c62828', mt: 0.25 }}>
+              <Box
+                component="span"
+                sx={{
+                  display: 'block',
+                  color: exportMsg.includes('aktar\u0131ld\u0131') ? '#2e7d32' : '#c62828',
+                  mt: 0.25,
+                }}
+              >
                 {exportMsg}
               </Box>
             )}
           </Typography>
 
-          {/* â”€â”€ DataTable â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
           <div className="qp-wrapper">
             <DataTable
               value={filteredRows}
               dataKey="id"
               loading={loading}
               loadingIcon="pi pi-spin pi-spinner"
-              emptyMessage="Filtreye uygun kayÄ±t bulunamadÄ±."
+              emptyMessage="Filtreye uygun kay\u0131t bulunamad\u0131."
               sortMode="multiple"
               removableSort
               paginator
@@ -320,14 +328,14 @@ export default function QueryPointsModal({
               scrollHeight="50vh"
               tableStyle={{ minWidth: '1020px' }}
             >
-              <Column field="name"      header="Ad"                  sortable style={{ minWidth: '160px' }} />
-              <Column field="number"    header="Numara"              sortable style={{ minWidth: '120px' }} />
-              <Column field="category"  header="Kategori" body={categoryBody} sortable style={{ minWidth: '140px' }} />
-              <Column field="latitude"  header="Enlem (4326)"  body={latBody}  sortable style={{ minWidth: '120px', fontFamily: 'monospace' }} />
+              <Column field="name" header="Ad" sortable style={{ minWidth: '160px' }} />
+              <Column field="number" header="Numara" sortable style={{ minWidth: '120px' }} />
+              <Column field="category" header="Kategori" body={categoryBody} sortable style={{ minWidth: '140px' }} />
+              <Column field="latitude" header="Enlem (4326)" body={latBody} sortable style={{ minWidth: '120px', fontFamily: 'monospace' }} />
               <Column field="longitude" header="Boylam (4326)" body={lonBody} sortable style={{ minWidth: '120px', fontFamily: 'monospace' }} />
               <Column field="xMercator" header="X (3857)" body={xBody} sortable style={{ minWidth: '110px', fontFamily: 'monospace' }} />
               <Column field="yMercator" header="Y (3857)" body={yBody} sortable style={{ minWidth: '110px', fontFamily: 'monospace' }} />
-              <Column field="createdAt" header="OluÅŸturulma Tarihi" body={dateBody} sortable style={{ minWidth: '160px' }} />
+              <Column field="createdAt" header="Olu\u015fturulma Tarihi" body={dateBody} sortable style={{ minWidth: '160px' }} />
             </DataTable>
           </div>
         </Box>

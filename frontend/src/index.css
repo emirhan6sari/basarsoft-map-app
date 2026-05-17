@@ -30,6 +30,12 @@ body {
   height: 100%;
 }
 
+/* Zoom +/- ile hizalı sabit konum */
+.map-container .ol-zoom {
+  top: 8px;
+  left: 8px;
+}
+
 /* PrimeReact overlay'leri MUI Dialog (z-index ~1300) üzerinde görünsün */
 body > .p-dropdown-panel,
 body > .p-connected-overlay,
