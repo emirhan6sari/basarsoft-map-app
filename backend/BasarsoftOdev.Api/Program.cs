@@ -55,13 +55,18 @@ try
 
     app.MapGet("/", () => Results.Ok(new { name = "Başarsoft Map API", status = "running", docs = "/swagger" }));
 
-    app.MapGet("/health/db", async (IConfiguration configuration) =>
+    app.MapGet("/health/db", async (IConfiguration configuration, ILogger<Program> logger) =>
     {
         try
         {
             var cs = ResolveConnectionString(configuration);
+            await DatabaseBootstrap.PrepareAsync(cs, logger);
             await DatabaseBootstrap.PingAsync(cs);
-            return Results.Ok(new { connected = true });
+            return Results.Ok(new
+            {
+                connected = true,
+                check = NpgsqlConnectionHelper.HealthCheckMarker,
+            });
         }
         catch (Exception ex)
         {
