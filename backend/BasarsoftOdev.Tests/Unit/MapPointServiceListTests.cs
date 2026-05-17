@@ -2,6 +2,7 @@ using BasarsoftOdev.BLL.Dtos;
 using BasarsoftOdev.BLL.Interfaces;
 using BasarsoftOdev.BLL.Options;
 using BasarsoftOdev.BLL.Services;
+using BasarsoftOdev.DAL.AppLogging;
 using GeoGeometryParser = BasarsoftOdev.BLL.Services.GeoGeometryParser;
 using BasarsoftOdev.Domain.Entities;
 using FluentAssertions;
@@ -32,6 +33,7 @@ public class MapPointServiceListTests
             coords,
             geo.Object,
             NullLogger<MapPointService>.Instance,
+            new NullAppLogWriter(),
             options);
     }
 

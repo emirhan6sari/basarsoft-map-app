@@ -18,6 +18,7 @@ public class AuthService : IAuthService
     private readonly IRefreshTokenRepository _refreshTokens;
     private readonly JwtSettings _jwt;
     private readonly ILogger<AuthService> _logger;
+    private readonly IAppLogWriter _appLogWriter;
 
     public AuthService(
         UserManager<ApplicationUser> userManager,
@@ -25,7 +26,8 @@ public class AuthService : IAuthService
         ITokenService tokenService,
         IRefreshTokenRepository refreshTokens,
         IOptions<JwtSettings> jwt,
-        ILogger<AuthService> logger)
+        ILogger<AuthService> logger,
+        IAppLogWriter appLogWriter)
     {
         _userManager = userManager;
         _signInManager = signInManager;
@@ -33,6 +35,7 @@ public class AuthService : IAuthService
         _refreshTokens = refreshTokens;
         _jwt = jwt.Value;
         _logger = logger;
+        _appLogWriter = appLogWriter;
     }
 
     private const string InvalidCredentialsMessage = "Kullanıcı adı veya şifre hatalı.";
@@ -43,6 +46,10 @@ public class AuthService : IAuthService
         if (user is null)
         {
             _logger.LogWarning("Başarısız giriş: kullanıcı bulunamadı ({UserName})", request.UserName);
+            await _appLogWriter.WriteAsync(new AppLogEntry(
+                "Warning",
+                $"Başarısız giriş: kullanıcı bulunamadı ({request.UserName})",
+                SourceContext: nameof(AuthService)), cancellationToken);
             return ServiceResult<AuthResponseDto>.Fail(401, ErrorCodes.Unauthorized, InvalidCredentialsMessage);
         }
 
@@ -50,10 +57,20 @@ public class AuthService : IAuthService
         if (!signIn.Succeeded)
         {
             _logger.LogWarning("Başarısız giriş: şifre hatalı ({UserName})", request.UserName);
+            await _appLogWriter.WriteAsync(new AppLogEntry(
+                "Warning",
+                $"Başarısız giriş: şifre hatalı ({request.UserName})",
+                SourceContext: nameof(AuthService)), cancellationToken);
             return ServiceResult<AuthResponseDto>.Fail(401, ErrorCodes.Unauthorized, InvalidCredentialsMessage);
         }
 
         _logger.LogInformation("Başarılı giriş: {UserId} ({UserName})", user.Id, user.UserName);
+        await _appLogWriter.WriteAsync(new AppLogEntry(
+            "Information",
+            $"Başarılı giriş: {user.UserName}",
+            SourceContext: nameof(AuthService),
+            UserId: user.Id.ToString(),
+            UserName: user.UserName), cancellationToken);
         var tokens = await IssueTokensAsync(user, cancellationToken);
         return ServiceResult<AuthResponseDto>.Ok(tokens);
     }
@@ -93,6 +110,12 @@ public class AuthService : IAuthService
         }
 
         _logger.LogInformation("Yeni kullanıcı kaydı: {UserId} ({UserName})", user.Id, user.UserName);
+        await _appLogWriter.WriteAsync(new AppLogEntry(
+            "Information",
+            $"Yeni kullanıcı kaydı: {user.UserName}",
+            SourceContext: nameof(AuthService),
+            UserId: user.Id.ToString(),
+            UserName: user.UserName), cancellationToken);
         return await IssueTokensAsync(user, cancellationToken);
     }
 
@@ -138,6 +161,11 @@ public class AuthService : IAuthService
 
         await _refreshTokens.SaveChangesAsync(cancellationToken);
         _logger.LogInformation("Çıkış: {UserId}", userId);
+        await _appLogWriter.WriteAsync(new AppLogEntry(
+            "Information",
+            $"Çıkış: {userId}",
+            SourceContext: nameof(AuthService),
+            UserId: userId.ToString()), cancellationToken);
     }
 
     private async Task EnsureUserNameAvailableAsync(string userName, CancellationToken cancellationToken)

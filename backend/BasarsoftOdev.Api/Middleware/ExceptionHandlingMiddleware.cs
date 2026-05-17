@@ -3,6 +3,7 @@ using System.Security.Claims;
 using System.Text.Json;
 using BasarsoftOdev.BLL.Common;
 using BasarsoftOdev.BLL.Exceptions;
+using BasarsoftOdev.BLL.Interfaces;
 using FluentValidation;
 using Serilog.Context;
 
@@ -22,11 +23,16 @@ public class ExceptionHandlingMiddleware
 {
     private readonly RequestDelegate _next;
     private readonly ILogger<ExceptionHandlingMiddleware> _logger;
+    private readonly IAppLogWriter _appLogWriter;
 
-    public ExceptionHandlingMiddleware(RequestDelegate next, ILogger<ExceptionHandlingMiddleware> logger)
+    public ExceptionHandlingMiddleware(
+        RequestDelegate next,
+        ILogger<ExceptionHandlingMiddleware> logger,
+        IAppLogWriter appLogWriter)
     {
         _next = next;
         _logger = logger;
+        _appLogWriter = appLogWriter;
     }
 
     public async Task InvokeAsync(HttpContext context)
@@ -62,6 +68,16 @@ public class ExceptionHandlingMiddleware
             else
                 _logger.LogWarning(ex, "İş kuralı/validasyon hatası: {ErrorType}", ex.GetType().Name);
         }
+
+        var level = status >= 500 ? "Error" : "Warning";
+        await _appLogWriter.WriteAsync(new AppLogEntry(
+            Level: level,
+            Message: status >= 500 ? "İşlenmeyen hata" : $"İş kuralı/validasyon hatası: {ex.GetType().Name}",
+            Exception: ex.ToString(),
+            TraceId: traceId,
+            UserId: userId,
+            UserName: userName,
+            SourceContext: nameof(ExceptionHandlingMiddleware)));
 
         context.Response.ContentType = "application/json";
         context.Response.StatusCode = status;

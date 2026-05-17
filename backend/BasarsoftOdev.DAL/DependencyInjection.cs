@@ -1,4 +1,5 @@
 using BasarsoftOdev.BLL.Interfaces;
+using BasarsoftOdev.DAL.AppLogging;
 using BasarsoftOdev.DAL.Data;
 using Npgsql;
 using BasarsoftOdev.DAL.Identity;
@@ -55,6 +56,11 @@ public static class DependencyInjection
         services.AddScoped<IMapPointRepository, MapPointRepository>();
         services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
         services.AddScoped<ICategoryRepository, CategoryRepository>();
+
+        if (useInMemoryDatabase)
+            services.AddSingleton<IAppLogWriter, NullAppLogWriter>();
+        else
+            services.AddSingleton<IAppLogWriter, AppLogWriter>();
 
         return services;
     }

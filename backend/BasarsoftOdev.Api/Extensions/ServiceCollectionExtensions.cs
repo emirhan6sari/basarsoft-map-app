@@ -21,6 +21,7 @@ public static class ServiceCollectionExtensions
         bool useInMemoryDatabase = false,
         string? inMemoryDatabaseName = null)
     {
+        services.AddHttpContextAccessor();
         services.AddBusinessOptions(configuration);
         services.Configure<LoggingSettings>(configuration.GetSection(LoggingSettings.SectionName));
         services.AddBusinessLayer();

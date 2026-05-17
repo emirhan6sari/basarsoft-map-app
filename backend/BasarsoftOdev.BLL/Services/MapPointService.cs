@@ -17,6 +17,7 @@ public class MapPointService : IMapPointService
     private readonly ICoordinateTransformationService _coordinates;
     private readonly IGeoGeometryParser _geoParser;
     private readonly ILogger<MapPointService> _logger;
+    private readonly IAppLogWriter _appLogWriter;
     private readonly double _proximityRadiusMeters;
     private readonly int _bboxMaxResults;
     private readonly int _listMaxResults;
@@ -26,12 +27,14 @@ public class MapPointService : IMapPointService
         ICoordinateTransformationService coordinates,
         IGeoGeometryParser geoParser,
         ILogger<MapPointService> logger,
+        IAppLogWriter appLogWriter,
         IOptions<MapSettings> mapSettings)
     {
         _repository = repository;
         _coordinates = coordinates;
         _geoParser = geoParser;
         _logger = logger;
+        _appLogWriter = appLogWriter;
         _proximityRadiusMeters = mapSettings.Value.ProximityRadiusMeters;
         _bboxMaxResults = mapSettings.Value.BboxMaxResults;
         _listMaxResults = mapSettings.Value.ListMaxResults;
@@ -119,6 +122,18 @@ public class MapPointService : IMapPointService
 
         await _repository.AddAsync(entity, cancellationToken);
         _logger.LogInformation("MapPoint oluşturuldu: {Id} ({Name}) by user {UserId}", entity.Id, entity.Name, createdByUserId);
+        await _appLogWriter.WriteAsync(new AppLogEntry(
+            "Information",
+            $"MapPoint oluşturuldu: {entity.Id} ({entity.Name})",
+            SourceContext: nameof(MapPointService),
+            UserId: createdByUserId.ToString(),
+            Properties: new Dictionary<string, object?>
+            {
+                ["Id"] = entity.Id,
+                ["Name"] = entity.Name,
+                ["Category"] = entity.Category,
+            }),
+            cancellationToken);
         var created = await _repository.GetByIdAsync(entity.Id, cancellationToken);
         return ToDto(created ?? entity, includeCreatorInfo: true);
     }
@@ -142,6 +157,13 @@ public class MapPointService : IMapPointService
 
         await _repository.UpdateAsync(entity, cancellationToken);
         _logger.LogInformation("MapPoint güncellendi: {Id}", id);
+        await _appLogWriter.WriteAsync(new AppLogEntry(
+            "Information",
+            $"MapPoint güncellendi: {id}",
+            SourceContext: nameof(MapPointService),
+            UserId: requestingUserId.ToString(),
+            Properties: new Dictionary<string, object?> { ["Id"] = id }),
+            cancellationToken);
         return ToDto(entity, isAdmin);
     }
 
@@ -235,6 +257,17 @@ public class MapPointService : IMapPointService
             created.Count,
             skipped.Count,
             createdByUserId);
+        await _appLogWriter.WriteAsync(new AppLogEntry(
+            "Information",
+            $"MapPoint içe aktarım: {created.Count} kayıt, {skipped.Count} atlandı",
+            SourceContext: nameof(MapPointService),
+            UserId: createdByUserId.ToString(),
+            Properties: new Dictionary<string, object?>
+            {
+                ["CreatedCount"] = created.Count,
+                ["SkippedCount"] = skipped.Count,
+            }),
+            cancellationToken);
 
         return new MapPointImportResultDto
         {
@@ -253,6 +286,13 @@ public class MapPointService : IMapPointService
         EnsureCanModify(entity, requestingUserId, isAdmin);
         await _repository.SoftDeleteAsync(id, requestingUserId, cancellationToken);
         _logger.LogInformation("MapPoint soft-delete: {Id} by {UserId}", id, requestingUserId);
+        await _appLogWriter.WriteAsync(new AppLogEntry(
+            "Information",
+            $"MapPoint silindi (soft-delete): {id}",
+            SourceContext: nameof(MapPointService),
+            UserId: requestingUserId.ToString(),
+            Properties: new Dictionary<string, object?> { ["Id"] = id }),
+            cancellationToken);
         return true;
     }
 

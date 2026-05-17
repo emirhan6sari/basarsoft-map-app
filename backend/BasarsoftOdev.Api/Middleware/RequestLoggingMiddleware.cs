@@ -1,36 +1,30 @@
 using System.Diagnostics;
 using BasarsoftOdev.Api.Options;
+using BasarsoftOdev.BLL.Interfaces;
 using Microsoft.Extensions.Options;
 
 namespace BasarsoftOdev.Api.Middleware;
 
 /// <summary>
-/// Her HTTP isteğinin tamamlanma süresini ve durum kodunu yapılandırılmış
-/// Serilog logu olarak yazar. Bu loglar Serilog sink'leri tarafından
-/// 'app_logs' tablosuna (PostgreSQL) ve Console'a iletilir.
-///
-/// Davranış:
-///   - 5xx → LogError    (her zaman üretim alarmı için)
-///   - 4xx veya yavaş istek (Logging:SlowRequestThresholdMs üstü) → LogWarning
-///   - Diğer → LogInformation
-///   - Logging:SkipPathPrefixes ile eşleşen yollar (örn. /swagger, /health) atlanır
-///
-/// LoggingScopeMiddleware ile eşleşir: TraceId / UserName otomatik olarak
-/// her log satırına eklenir (LogContext.PushProperty).
+/// Her HTTP isteğinin tamamlanma süresini ve durum kodunu loglar.
+/// Serilog (Console) + <see cref="IAppLogWriter"/> (PostgreSQL app_logs) birlikte kullanılır.
 /// </summary>
 public class RequestLoggingMiddleware
 {
     private readonly RequestDelegate _next;
     private readonly ILogger<RequestLoggingMiddleware> _logger;
+    private readonly IAppLogWriter _appLogWriter;
     private readonly LoggingSettings _settings;
 
     public RequestLoggingMiddleware(
         RequestDelegate next,
         ILogger<RequestLoggingMiddleware> logger,
+        IAppLogWriter appLogWriter,
         IOptions<LoggingSettings> settings)
     {
         _next = next;
         _logger = logger;
+        _appLogWriter = appLogWriter;
         _settings = settings.Value;
     }
 
@@ -51,7 +45,7 @@ public class RequestLoggingMiddleware
         {
             await _next(context);
             sw.Stop();
-            LogCompleted(context, method, route, sw.ElapsedMilliseconds);
+            await LogCompletedAsync(context, method, route, sw.ElapsedMilliseconds);
         }
         catch
         {
@@ -79,30 +73,49 @@ public class RequestLoggingMiddleware
         return path;
     }
 
-    private void LogCompleted(HttpContext context, string method, string route, long elapsedMs)
+    private async Task LogCompletedAsync(HttpContext context, string method, string route, long elapsedMs)
     {
         var status = context.Response.StatusCode;
         var slow = elapsedMs >= _settings.SlowRequestThresholdMs;
+        var slowTag = slow ? " [yavaş]" : string.Empty;
 
+        string level;
+        string message;
         if (status >= 500)
         {
-            _logger.LogError(
-                "HTTP {Method} {Route} → {StatusCode} ({ElapsedMs} ms)",
-                method, route, status, elapsedMs);
-            return;
+            level = "Error";
+            message = $"HTTP {method} {route} → {status} ({elapsedMs} ms)";
+            _logger.LogError("HTTP {Method} {Route} → {StatusCode} ({ElapsedMs} ms)", method, route, status, elapsedMs);
         }
-
-        if (status >= 400 || slow)
+        else if (status >= 400 || slow)
         {
+            level = "Warning";
+            message = $"HTTP {method} {route} → {status} ({elapsedMs} ms){slowTag}";
             _logger.LogWarning(
                 "HTTP {Method} {Route} → {StatusCode} ({ElapsedMs} ms){SlowTag}",
-                method, route, status, elapsedMs,
-                slow ? " [yavaş]" : string.Empty);
-            return;
+                method, route, status, elapsedMs, slowTag);
+        }
+        else
+        {
+            level = "Information";
+            message = $"HTTP {method} {route} → {status} ({elapsedMs} ms)";
+            _logger.LogInformation(
+                "HTTP {Method} {Route} → {StatusCode} ({ElapsedMs} ms)",
+                method, route, status, elapsedMs);
         }
 
-        _logger.LogInformation(
-            "HTTP {Method} {Route} → {StatusCode} ({ElapsedMs} ms)",
-            method, route, status, elapsedMs);
+        await _appLogWriter.WriteAsync(new AppLogEntry(
+            Level: level,
+            Message: message,
+            MessageTemplate: "HTTP {Method} {Route} → {StatusCode} ({ElapsedMs} ms)",
+            SourceContext: nameof(RequestLoggingMiddleware),
+            Properties: new Dictionary<string, object?>
+            {
+                ["Method"] = method,
+                ["Route"] = route,
+                ["StatusCode"] = status,
+                ["ElapsedMs"] = elapsedMs,
+                ["Slow"] = slow,
+            }));
     }
 }
