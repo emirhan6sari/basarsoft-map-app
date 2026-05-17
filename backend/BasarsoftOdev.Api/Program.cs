@@ -1,7 +1,8 @@
+using BasarsoftOdev.Api;
 using BasarsoftOdev.Api.Extensions;
+using BasarsoftOdev.Api.HostedServices;
 using BasarsoftOdev.Api.Middleware;
 using BasarsoftOdev.DAL;
-using BasarsoftOdev.DAL.Data;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
 
@@ -21,13 +22,16 @@ try
     var builder = WebApplication.CreateBuilder(args);
     builder.Host.UseSerilog();
 
-    var connectionString = ResolveConnectionString(builder.Configuration);
+    var connectionString = ConnectionStringResolver.Resolve(builder.Configuration);
     var useInMemoryDb = builder.Environment.IsEnvironment("Testing");
     builder.Services.AddApiServices(
         builder.Configuration,
         connectionString,
         useInMemoryDatabase: useInMemoryDb,
         inMemoryDatabaseName: useInMemoryDb ? "BasarsoftIntegrationTests" : null);
+
+    if (!useInMemoryDb)
+        builder.Services.AddHostedService<DatabaseInitializerHostedService>();
 
     var app = builder.Build();
 
@@ -59,7 +63,7 @@ try
     {
         try
         {
-            var cs = ResolveConnectionString(configuration);
+            var cs = ConnectionStringResolver.Resolve(configuration);
             await DatabaseBootstrap.PrepareAsync(cs, logger);
             await DatabaseBootstrap.PingAsync(cs);
             return Results.Ok(new
@@ -77,13 +81,6 @@ try
         }
     }).AllowAnonymous();
 
-    if (!app.Environment.IsEnvironment("Testing"))
-    {
-        await DatabaseBootstrap.PrepareAsync(connectionString, app.Logger);
-        await app.ApplyMigrationsAsync();
-        await app.SeedDatabaseAsync();
-    }
-
     app.Run();
 }
 catch (Exception ex)
@@ -93,27 +90,6 @@ catch (Exception ex)
 finally
 {
     Log.CloseAndFlush();
-}
-
-static string ResolveConnectionString(IConfiguration configuration)
-{
-    var cs = configuration.GetConnectionString("DefaultConnection");
-    if (!string.IsNullOrWhiteSpace(cs)) return cs;
-
-    var databaseUrl = Environment.GetEnvironmentVariable("DATABASE_URL");
-    if (!string.IsNullOrWhiteSpace(databaseUrl))
-    {
-        var uri = new Uri(databaseUrl);
-        var userInfo = uri.UserInfo.Split(':', 2);
-        var username = Uri.UnescapeDataString(userInfo[0]);
-        var password = userInfo.Length > 1 ? Uri.UnescapeDataString(userInfo[1]) : string.Empty;
-        var database = uri.AbsolutePath.TrimStart('/');
-        var railwayCs =
-            $"Host={uri.Host};Port={uri.Port};Database={database};Username={username};Password={password};SSL Mode=Require;Trust Server Certificate=true";
-        return railwayCs;
-    }
-
-    throw new InvalidOperationException("Connection string bulunamadı.");
 }
 
 /// <summary>WebApplicationFactory (integration test) için.</summary>

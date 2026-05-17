@@ -14,6 +14,5 @@ RUN dotnet publish BasarsoftOdev.Api/BasarsoftOdev.Api.csproj -c Release -o /app
 FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS runtime
 WORKDIR /app
 COPY --from=build /app/publish .
-ENV ASPNETCORE_URLS=http://0.0.0.0:8080
-EXPOSE 8080
+# Railway: ASPNETCORE_URLS=http://0.0.0.0:${PORT} (servis Variables)
 ENTRYPOINT ["dotnet", "BasarsoftOdev.Api.dll"]
