@@ -68,7 +68,7 @@ public class MapPointService : IMapPointService
             totalCount = 0;
         }
 
-        var items = entities.Select(e => ToDto(e, includeCreatorInfo: isAdmin && bbox is null)).ToList();
+        var items = entities.Select(e => ToDto(e, includeCreatorInfo: isAdmin)).ToList();
         var returned = items.Count;
 
         if (totalCount > returned)
@@ -119,7 +119,8 @@ public class MapPointService : IMapPointService
 
         await _repository.AddAsync(entity, cancellationToken);
         _logger.LogInformation("MapPoint oluşturuldu: {Id} ({Name}) by user {UserId}", entity.Id, entity.Name, createdByUserId);
-        return ToDto(entity, includeCreatorInfo: false);
+        var created = await _repository.GetByIdAsync(entity.Id, cancellationToken);
+        return ToDto(created ?? entity, includeCreatorInfo: true);
     }
 
     public async Task<MapPointResponseDto?> UpdateAsync(Guid id, MapPointUpdateDto dto, Guid requestingUserId, bool isAdmin, CancellationToken cancellationToken = default)

@@ -57,6 +57,8 @@ function normalizePoint(raw) {
     createdAt: raw.createdAt ?? raw.CreatedAt,
     description: raw.description ?? raw.Description,
     createdByUserId: raw.createdByUserId ?? raw.CreatedByUserId,
+    createdByUserName: raw.createdByUserName ?? raw.CreatedByUserName,
+    createdByDisplayName: raw.createdByDisplayName ?? raw.CreatedByDisplayName,
   };
 }
 
@@ -135,11 +137,11 @@ export default function QueryPointsModal({
         setCategories(cats ?? []);
         if (result?.truncated) {
           setExportMsg(
-            `${result.returnedCount} / ${result.totalCount} kay\u0131t listelendi \u2014 daha fazlas\u0131 i\u00e7in haritada yak\u0131nla\u015ft\u0131r\u0131n.`,
+            `${result.returnedCount} / ${result.totalCount} kayıt listelendi — daha fazlası için haritada yakınlaştırın.`,
           );
         }
       })
-      .catch((err) => console.error('Noktalar y\u00fcklenemedi:', err))
+      .catch((err) => console.error('Noktalar yüklenemedi:', err))
       .finally(() => { if (alive) setLoading(false); });
 
     return () => { alive = false; };
@@ -160,7 +162,7 @@ export default function QueryPointsModal({
     setExportMsg(null);
     const result = fn(filteredRows, categories);
     if (!result.ok) setExportMsg(result.message);
-    else setExportMsg(`${result.count} kay\u0131t d\u0131\u015fa aktar\u0131ld\u0131.`);
+    else setExportMsg(`${result.count} kayıt dışa aktarıldı.`);
   };
 
   const handleExportGeoJSON = () => runExport(exportPointsGeoJSON);
@@ -177,7 +179,7 @@ export default function QueryPointsModal({
   const yBody = (row) => fmtMercator(row.yMercator);
   const dateBody = (row) => fmtDate(row.createdAt);
 
-  const defaultHint = `${filteredRows.length} / ${rows.length} kay\u0131t \u2022 Sat\u0131ra t\u0131klay\u0131n \u2192 haritada vurgula`;
+  const defaultHint = `${filteredRows.length} / ${rows.length} kayıt • Satıra tıklayın → haritada vurgula`;
 
   return (
     <Dialog
@@ -206,7 +208,7 @@ export default function QueryPointsModal({
         {selectedRow && (
           <Chip
             icon={<MyLocationIcon sx={{ fontSize: 16 }} />}
-            label={`Se\u00e7ili: ${selectedRow.name}`}
+            label={`Seçili: ${selectedRow.name}`}
             size="small"
             sx={{ bgcolor: '#80cbc4', color: '#004d40', fontWeight: 600 }}
           />
@@ -226,7 +228,7 @@ export default function QueryPointsModal({
                 id="qp-name-filter"
                 value={nameFilter}
                 onChange={(e) => setNameFilter(e.target.value)}
-                placeholder={'\u0130sme g\u00f6re ara\u2026'}
+                placeholder="İsme göre ara…"
               />
             </div>
 
@@ -236,7 +238,7 @@ export default function QueryPointsModal({
                 id="qp-number-filter"
                 value={numberFilter}
                 onChange={(e) => setNumberFilter(e.target.value)}
-                placeholder={'Numara ara\u2026'}
+                placeholder="Numara ara…"
               />
             </div>
 
@@ -247,7 +249,7 @@ export default function QueryPointsModal({
                 value={categoryFilter}
                 options={categoryOptions}
                 onChange={(e) => setCategoryFilter(e.value)}
-                placeholder="T\u00fcm\u00fc"
+                placeholder="Tümü"
                 showClear
                 appendTo={OVERLAY_TARGET}
                 panelClassName="qp-dropdown-panel"
@@ -297,7 +299,7 @@ export default function QueryPointsModal({
                 component="span"
                 sx={{
                   display: 'block',
-                  color: exportMsg.includes('aktar\u0131ld\u0131') ? '#2e7d32' : '#c62828',
+                  color: exportMsg.includes('aktarıldı') ? '#2e7d32' : '#c62828',
                   mt: 0.25,
                 }}
               >
@@ -312,7 +314,7 @@ export default function QueryPointsModal({
               dataKey="id"
               loading={loading}
               loadingIcon="pi pi-spin pi-spinner"
-              emptyMessage="Filtreye uygun kay\u0131t bulunamad\u0131."
+              emptyMessage="Filtreye uygun kayıt bulunamadı."
               sortMode="multiple"
               removableSort
               paginator
@@ -335,7 +337,7 @@ export default function QueryPointsModal({
               <Column field="longitude" header="Boylam (4326)" body={lonBody} sortable style={{ minWidth: '120px', fontFamily: 'monospace' }} />
               <Column field="xMercator" header="X (3857)" body={xBody} sortable style={{ minWidth: '110px', fontFamily: 'monospace' }} />
               <Column field="yMercator" header="Y (3857)" body={yBody} sortable style={{ minWidth: '110px', fontFamily: 'monospace' }} />
-              <Column field="createdAt" header="Olu\u015fturulma Tarihi" body={dateBody} sortable style={{ minWidth: '160px' }} />
+              <Column field="createdAt" header="Oluşturulma Tarihi" body={dateBody} sortable style={{ minWidth: '160px' }} />
             </DataTable>
           </div>
         </Box>

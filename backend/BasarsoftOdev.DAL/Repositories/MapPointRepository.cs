@@ -23,7 +23,7 @@ public class MapPointRepository : IMapPointRepository
         int take,
         CancellationToken cancellationToken = default)
     {
-        var query = ApplyBBox(_db.MapPoints.AsNoTracking(), bbox);
+        var query = ApplyBBox(WithCreator().AsNoTracking(), bbox);
         var total = await query.CountAsync(cancellationToken);
         var items = await query
             .OrderByDescending(p => p.CreatedAt)
@@ -36,7 +36,7 @@ public class MapPointRepository : IMapPointRepository
         int take,
         CancellationToken cancellationToken = default)
     {
-        var query = _db.MapPoints.AsNoTracking();
+        var query = WithCreator().AsNoTracking();
         var total = await query.CountAsync(cancellationToken);
         var items = await query
             .OrderByDescending(p => p.CreatedAt)
