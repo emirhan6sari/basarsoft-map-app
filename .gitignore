@@ -55,6 +55,10 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+# Backend Serilog runtime logları (kullanıcı/IP bilgisi içerebilir)
+backend/BasarsoftOdev.Api/Logs/
+backend/**/Logs/
+
 # ---------------------------------------------------------------------------
 # Cursor / AI — yerel agent kuralları (repoya gönderilmez)
 # ---------------------------------------------------------------------------

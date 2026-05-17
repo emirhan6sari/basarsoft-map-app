@@ -2,7 +2,6 @@
 
 > **Başvuru:** Başarsoft Yazılım Geliştirme — işe giriş case çalışması  
 > **Aday:** İsmail Emirhan Sarı — [sariemirhan6@gmail.com](mailto:sariemirhan6@gmail.com)  
-> **Teslim tarihi:** 19 Mayıs 2026 Salı, 23:59  
 > **Çözüm dosyası:** `BasarsoftMapApp.sln`  
 > **Canlı uygulama:** <https://basarsoft-map-app-production-8e56.up.railway.app/>
 
