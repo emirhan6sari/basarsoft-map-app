@@ -20,6 +20,11 @@ Log.Logger = new LoggerConfiguration()
 try
 {
     var builder = WebApplication.CreateBuilder(args);
+
+    var port = Environment.GetEnvironmentVariable("PORT");
+    if (!string.IsNullOrWhiteSpace(port))
+        builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
+
     builder.Host.UseSerilog();
 
     var connectionString = ConnectionStringResolver.Resolve(builder.Configuration);
@@ -47,9 +52,7 @@ try
         });
     }
 
-    if (!app.Environment.IsDevelopment())
-        app.UseHttpsRedirection();
-
+    // Railway: TLS edge'de; container içi HTTP healthcheck — HTTPS yönlendirme kapalı
     app.UseCors(ServiceCollectionExtensions.FrontendCorsPolicy);
     app.UseAuthentication();
     app.UseAuthorization();
@@ -62,7 +65,7 @@ try
         name = "Başarsoft Map API",
         status = "running",
         docs = "/swagger",
-        build = "railway-20260517",
+        build = "railway-20260517b",
     }));
 
     app.MapGet("/health/db", async (IConfiguration configuration, ILogger<Program> logger) =>

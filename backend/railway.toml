@@ -4,7 +4,4 @@ builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
 
 [deploy]
-# DB kontrolü /health/db — deploy sırasında migration bitmeden 500 dönebilir
-healthcheckPath = "/"
-healthcheckTimeout = 300
 restartPolicyType = "ON_FAILURE"
