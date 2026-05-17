@@ -3,7 +3,6 @@ using BasarsoftOdev.Api.Middleware;
 using BasarsoftOdev.DAL;
 using BasarsoftOdev.DAL.Data;
 using Microsoft.EntityFrameworkCore;
-using Npgsql;
 using Serilog;
 
 Log.Logger = new LoggerConfiguration()
@@ -61,11 +60,7 @@ try
         try
         {
             var cs = ResolveConnectionString(configuration);
-            await using var conn = new NpgsqlConnection(cs);
-            await conn.OpenAsync();
-            await using var cmd = conn.CreateCommand();
-            cmd.CommandText = "SELECT 1";
-            await cmd.ExecuteScalarAsync();
+            await DatabaseBootstrap.PingAsync(cs);
             return Results.Ok(new { connected = true });
         }
         catch (Exception ex)
@@ -79,7 +74,7 @@ try
 
     if (!app.Environment.IsEnvironment("Testing"))
     {
-        await PostgisCleanup.DropIfPresentAsync(connectionString, app.Logger);
+        await DatabaseBootstrap.PrepareAsync(connectionString, app.Logger);
         await app.ApplyMigrationsAsync();
         await app.SeedDatabaseAsync();
     }

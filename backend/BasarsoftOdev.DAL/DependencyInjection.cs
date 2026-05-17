@@ -1,5 +1,6 @@
 using BasarsoftOdev.BLL.Interfaces;
 using BasarsoftOdev.DAL.Data;
+using Npgsql;
 using BasarsoftOdev.DAL.Identity;
 using BasarsoftOdev.DAL.Repositories;
 using BasarsoftOdev.Domain.Entities;
@@ -65,7 +66,19 @@ public static class DependencyInjection
         }
 
         logger.LogInformation("Migration uygulanıyor: {Migrations}", string.Join(", ", pending));
-        await db.Database.MigrateAsync();
+        try
+        {
+            await db.Database.MigrateAsync();
+        }
+        catch (Npgsql.PostgresException ex) when (ex.SqlState == "42883" && ex.MessageText.Contains("postgis_version", StringComparison.OrdinalIgnoreCase))
+        {
+            var cs = db.Database.GetConnectionString()
+                ?? throw new InvalidOperationException("Connection string bulunamadı.");
+            logger.LogWarning("postgis_version hatası — veritabanı temizlenip migration yeniden deneniyor.");
+            await DatabaseBootstrap.PrepareAsync(cs, logger);
+            await db.Database.MigrateAsync();
+        }
+
         logger.LogInformation("Migration tamamlandı.");
     }
 
