@@ -1,13 +1,12 @@
-/** Haritada nokta yüklemesi için minimum zoom (Türkiye fit ~7; daha uzak = yükleme yok). */
-export const MIN_ZOOM_FOR_POINT_LOAD = 7;
-
 /**
- * Zoom seviyesine göre istek limiti (sunucu üst sınırı ile clamp edilir).
+ * Zoom seviyesine göre nokta isteği üst limiti (sunucu üst sınırı ile clamp edilir).
+ * Tüm zoom seviyelerinde noktalar yüklenir; sadece yoğun (uzak) görünümde
+ * daha yüksek limit, yakın zoom'da daha düşük limit istenir.
+ *
  * @param {number} zoom
- * @returns {number} 0 = yükleme yapma
+ * @returns {number} istek başına döndürülecek üst kayıt
  */
 export function resolveBboxLoadLimit(zoom) {
-  if (zoom < MIN_ZOOM_FOR_POINT_LOAD) return 0;
   if (zoom < 9) return 10000;
   if (zoom >= 15) return 2500;
   if (zoom >= 12) return 1800;

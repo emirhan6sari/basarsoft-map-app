@@ -1,15 +1,16 @@
 # Başarsoft — OpenLayers Tabanlı Web Harita Uygulaması
 
 > **Başvuru:** Başarsoft Yazılım Geliştirme — işe giriş case çalışması  
-> **Aday:** *(adınızı ve iletişim bilginizi buraya yazın)*  
+> **Aday:** İsmail Emirhan Sarı — [sariemirhan6@gmail.com](mailto:sariemirhan6@gmail.com)  
 > **Teslim tarihi:** 19 Mayıs 2026 Salı, 23:59  
-> **Çözüm dosyası:** `BasarsoftMapApp.sln`
+> **Çözüm dosyası:** `BasarsoftMapApp.sln`  
+> **Canlı uygulama:** <https://basarsoft-map-app-production-8e56.up.railway.app/>
 
 Bu depo, Başarsoft’un paylaştığı **OpenLayers tabanlı web harita** ödevinin tamamlanmış halidir. Uygulama; harita üzerinde **nokta ekleme**, **sorgulama**, **mekansal filtreleme**, **koordinat dönüşümü (EPSG:4326 ↔ EPSG:3857)** ve **katman yönetimi** sunar. Veriler **PostgreSQL** üzerinde REST API ile saklanır; backend **katmanlı mimari** (Api / BLL / DAL / Domain), frontend **React + OpenLayers 10** kullanır.
 
 **Veri saklama tercihi (ödev metni):** PDF’de JSON/TXT, SQLite veya PostgreSQL seçenekleri vardı. Bu projede **PostgreSQL 16+** ve **EF Core migration** kullanıldı; koordinatlar hem WGS84 hem Web Mercator sütunlarında tutulur. Teslimde **pg_dump yedeği** beklenmektedir ([Veritabanı yedeği](#veritabanı-yedeği)).
 
-**Canlı demo (Railway):** [Frontend](https://basarsoft-map-app-production-8e56.up.railway.app) · [API](https://basarsoft-map-app-production.up.railway.app) · [Swagger](https://basarsoft-map-app-production.up.railway.app/swagger) — giriş: `admin` / `admin` (geliştirme seed).
+**Canlı demo (Railway):** [Uygulama](https://basarsoft-map-app-production-8e56.up.railway.app/) · [API](https://basarsoft-map-app-production.up.railway.app) · [Swagger](https://basarsoft-map-app-production.up.railway.app/swagger) — giriş: `admin` / `admin` (geliştirme seed).
 
 ---
 
@@ -184,7 +185,7 @@ Zorunlu 10 madde; her biri için ayrıntılı tablolar aşağıdadır.
 
 | PDF | Proje |
 | :--- | :--- |
-| Açılışta kayıtlı noktalar | Giriş sonrası bbox ile yükleme; Türkiye zoom'unda (≥7) görünür alandaki noktalar |
+| Açılışta kayıtlı noktalar | Giriş sonrası tüm zoom seviyelerinde görünür alana göre bbox + `limit` ile yüklenir |
 | Kategoriye göre stil | `mapPointStyles.js`, `CategoryLegend` |
 | Çok noktada cluster, zoom'da çözülme | OpenLayers `Cluster` source; zoom arttıkça tekil noktalar |
 | 10.000+ kayıt (opsiyonel madde 5) | Bbox + zoom eşiği – [§5 performans](#5-10000-kayıt-performans-yaklaşımı-tamamlandı) |
@@ -726,7 +727,7 @@ Görünür harita alanına göre filtre (EPSG:4326). Dört parametre **birlikte*
 
 Örnek: `GET /api/MapPoints?minLon=28.5&minLat=36.8&maxLon=33.2&maxLat=40.1`
 
-Parametre yoksa liste üst sınırı uygulanır (`ListMaxResults`, varsayılan **5000**). Frontend haritada `moveend` olayında bbox ile yeniden yükler (350 ms debounce). Zoom **&lt; 7** iken nokta isteği gönderilmez (`mapPerformance.js` → `MIN_ZOOM_FOR_POINT_LOAD = 7`).
+Parametre yoksa liste üst sınırı uygulanır (`ListMaxResults`, varsayılan **5000**). Frontend haritada `moveend` olayında bbox ile yeniden yükler (350 ms debounce); tüm zoom seviyelerinde nokta isteği gönderilir, zoom’a göre yalnızca `limit` ayarlanır (`mapPerformance.js`).
 
 **Performans (`limit` + meta yanıt):**
 
@@ -868,12 +869,12 @@ Ortam değişkeni örneği: `ConnectionStrings__DefaultConnection`, `Jwt__Secret
 |----------|----------|------------|
 | `VITE_API_BASE_URL` | API kök URL | `http://localhost:5226` |
 
-**Harita performansı** (`frontend/src/utils/mapPerformance.js`, kod içi sabitler):
+**Harita performansı** (`frontend/src/utils/mapPerformance.js`):
 
-| Sabit | Değer | Açıklama |
-|-------|-------|----------|
-| `MIN_ZOOM_FOR_POINT_LOAD` | 7 | Türkiye görünümünde nokta yükleme |
-| `resolveBboxLoadLimit` | zoom 7–8 → 10000; 9+ → 800–2500 | Bbox isteği `limit` parametresi |
+| Fonksiyon | Davranış |
+|-----------|----------|
+| `resolveBboxLoadLimit(zoom)` | Zoom &lt; 9 → 10000; 9–10 → 1200; 12+ → 1800; 15+ → 2500. Tüm zoom seviyelerinde nokta isteği gönderilir. |
+| `resolveClusterDistance(zoom, count)` | 45–72 px arası dinamik cluster mesafesi |
 
 ---
 
@@ -997,7 +998,7 @@ psql -U postgres -h localhost -d basarsoft_map -f database/check_perf_count.sql
 1. Backend: `cd backend/BasarsoftOdev.Api` → `dotnet run` (http://localhost:5226).
 2. Frontend: `cd frontend` → `npm run dev` (http://localhost:5173).
 3. Giriş: `admin` / `admin` (geliştirme seed).
-4. Haritayı **yakınlaştırın** (zoom ≥ 7; daha uzaktaysa “yakınlaştırın” uyarısı normal).
+4. Haritayı istediğiniz seviyeye getirin — tüm zoomlarda görünür alandaki noktalar yüklenir.
 5. Pan / zoom → tarayıcı **Geliştirici araçları → Ağ** sekmesinde `GET /api/mappoints?minLon=...&limit=...` istekleri.
 6. Yoğun alanda sarı banner: *“X / Y gösteriliyor”* → `truncated: true`, bbox + limit çalışıyor demektir.
 
@@ -1005,7 +1006,7 @@ psql -U postgres -h localhost -d basarsoft_map -f database/check_perf_count.sql
 
 | Belirti | Olası neden |
 |---------|-------------|
-| Haritada hiç nokta yok | Zoom &lt; 7; yakınlaştırın |
+| Haritada hiç nokta yok | Bbox dışındaki kayıtlar görünmez — pan/zoom ile alanı taşıyın |
 | `psql: command not found` | PostgreSQL `bin` PATH’te değil |
 | `Kullanıcı bulunamadı` (SQL) | Önce API’yi bir kez çalıştırın (Identity seed) |
 | `perf_points_inserted` ≠ 10000 | Script çıktısına bakın; `check_perf_count.sql` çalıştırın |
@@ -1044,7 +1045,7 @@ psql -U postgres -h localhost -d basarsoft_map -f database/delete_perf_test_poin
 
 | Ne yapar (seed) | Açıklama |
 |-----------------|----------|
-| Konum | **Türkiye** bbox (25.5°–44.8° doğu, 35.8°–42.2° kuzey); zoom **≥ 7** (Türkiye görünümü) iken yazı okunur |
+| Konum | **Türkiye** bbox (25.5°–44.8° doğu, 35.8°–42.2° kuzey); Türkiye görünümü (zoom ~7) yazıyı okunur kılar |
 | Numara öneki | `BASAR-` |
 | Tekrar çalıştırma | Önce mevcut `BASAR-%` kayıtlarını siler, sonra yeniden ekler |
 | Gereksinim | En az bir kullanıcı (`AspNetUsers`) — API’yi bir kez çalıştırıp migration/seed tamamlanmış olmalı |
@@ -1098,9 +1099,9 @@ psql -U postgres -h localhost -d basarsoft_map -f database/check_basartext_count
 ### 4. Uygulamada görüntüleme
 
 1. Backend + frontend çalışır durumda olsun; `admin` / `admin` ile giriş yapın.
-2. Haritayı açın — varsayılan Türkiye görünümü **zoom ~7**; bu seviyede noktalar yüklenir.
+2. Haritayı açın — varsayılan Türkiye görünümü **zoom ~7**; tüm zoomlarda nokta yüklenir.
 3. Tüm ülke kadrajında nokta kümesi **BAŞARSOFT** harflerini oluşturur (pan gerekmez).
-4. Yalnızca `BASAR-*` kayıtları varken zoom **7–8**’de istemci `limit=10000` ister; sunucu üst sınırı `Map:BboxMaxResults` (10000) ile tüm yazı yüklenebilir.
+4. Yalnızca `BASAR-*` kayıtları varken uzak zoomda istemci `limit=10000` ister; sunucu üst sınırı `Map:BboxMaxResults` (10000) ile tüm yazı yüklenebilir.
 
 ### 5. Demo verisini temizleme
 
@@ -1256,7 +1257,7 @@ Case dokümanındaki opsiyonel maddeler ve projedeki karşılıkları.
 | Katman | Davranış |
 |--------|----------|
 | API | `Count` + `Take(limit)`; bbox sorgusunda Admin için `Include(CreatedBy)` |
-| Harita | Zoom &lt; 7 → yükleme yok; zoom 7–8 → `limit` 10000; daha yakın → 800–2500 |
+| Harita | Tüm zoomlarda istek; zoom &lt; 9 → `limit` 10000; daha yakın → 800–2500 |
 | Cluster | Nokta sayısına göre mesafe 45–72 px |
 | UI | “Yakınlaştırın” / “X/Y gösteriliyor” uyarıları |
 
@@ -1358,8 +1359,7 @@ Temel ödev + opsiyonel maddeler tamamlandıktan sonra eklenen başlıca gelişt
 
 ## Bilinen Sınırlamalar
 
-- Bbox dışındaki noktalar haritada görünmez; `truncated: true` ise tüm alan yüklenmemiştir — yakınlaştırın veya zoom artırın  
-- Çok uzak zoom’da (harita &lt; 7) nokta isteği gönderilmez (`MIN_ZOOM_FOR_POINT_LOAD`)  
+- Bbox dışındaki noktalar haritada görünmez; `truncated: true` ise tüm alan yüklenmemiştir — yakınlaştırın veya alanı kaydırın  
 - `PERF-*` ve `BASAR-*` test verileri aynı anda haritada karışık görünebilir — genelde birini silin  
 - İçe aktarımda tek istekte en fazla 500 nokta  
 - GeoJSON/CSV dışa aktarma yalnızca sorgu modalındaki listeden (sunucu tarafı export endpoint yok)  

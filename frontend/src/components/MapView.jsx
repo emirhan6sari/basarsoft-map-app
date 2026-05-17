@@ -60,7 +60,6 @@ import { createMeasureStyleFunction } from '../utils/measureStyles';
 import { measureGeometry } from '../utils/measureFormat';
 import { bboxFromMap } from '../utils/mapBbox';
 import {
-  MIN_ZOOM_FOR_POINT_LOAD,
   resolveBboxLoadLimit,
   resolveClusterDistance,
 } from '../utils/mapPerformance';
@@ -562,14 +561,6 @@ function MapView({ activeMode, onModeConsumed }) {
       const zoom = map.getView().getZoom() ?? 0;
       const loadLimit = resolveBboxLoadLimit(zoom);
 
-      if (loadLimit === 0) {
-        if (abortController) abortController.abort();
-        replaceAllPointsOnMap([]);
-        setPointsLoadMeta({ type: 'zoom', minZoom: MIN_ZOOM_FOR_POINT_LOAD });
-        setPointsLoading(false);
-        return;
-      }
-
       if (abortController) abortController.abort();
       abortController = new AbortController();
 
@@ -1022,8 +1013,7 @@ function MapView({ activeMode, onModeConsumed }) {
 
   const spatialHint = spatialMode ? SPATIAL_HINTS[spatialMode] : null;
   const measureHint = measureMode ? MEASURE_HINTS[measureMode] : null;
-  const showZoomHint = loggedIn && pointsLoadMeta?.type === 'zoom' && !pointsLoading;
-  const categoryLegendTop = showZoomHint ? 118 : 72;
+  const categoryLegendTop = 72;
 
   return (
     <Box sx={{ position: 'relative', width: '100%', height: '100%' }}>
@@ -1040,23 +1030,6 @@ function MapView({ activeMode, onModeConsumed }) {
         open={layersPanelOpen}
         onOpenChange={setLayersPanelOpen}
       />
-      {showZoomHint && (
-        <Alert
-          severity="warning"
-          sx={{
-            position: 'absolute',
-            top: 52,
-            left: 12,
-            zIndex: 1002,
-            maxWidth: 300,
-            backgroundColor: 'rgba(255,255,255,0.96)',
-            boxShadow: 2,
-          }}
-        >
-          Noktaları görmek için haritayı yakınlaştırın (zoom ≥ {pointsLoadMeta.minZoom}).
-        </Alert>
-      )}
-
       <CategoryLegend visible={loggedIn} categories={categories} top={categoryLegendTop} />
 
       {loggedIn && pointsLoading && (
