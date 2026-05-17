@@ -1,6 +1,5 @@
 [build]
-# npm ci bazen node_modules/.vite EBUSY verir (Railway/Nixpacks önbelleği)
-buildCommand = "rm -rf node_modules/.vite && npm ci && npm run build"
+buildCommand = "npm ci && npm run build"
 
 [deploy]
 startCommand = "npm run start"
