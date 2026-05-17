@@ -1,24 +1,17 @@
 /**
- * Haritada tıklanan nokta — premium detay / düzenleme / silme popup.
+ * Haritada tıklanan nokta — detay / düzenleme / silme (Sorgula modalı ile uyumlu tema).
  */
 
 import { useEffect, useState } from 'react';
 import {
-  Dialog, DialogContent, DialogActions,
-  TextField, MenuItem, Button, Stack, Typography,
-  Alert, Box, IconButton, CircularProgress,
+  Dialog, DialogTitle, DialogContent, DialogActions,
+  TextField, MenuItem, Button, Stack, Typography, Box,
+  Alert, IconButton, CircularProgress,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import MyLocationIcon from '@mui/icons-material/MyLocation';
-import TableChartIcon from '@mui/icons-material/TableChart';
-import LabelIcon from '@mui/icons-material/Label';
-import AccessTimeIcon from '@mui/icons-material/AccessTime';
-import DescriptionIcon from '@mui/icons-material/Description';
-import PersonIcon from '@mui/icons-material/Person';
-import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
-import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import SaveIcon from '@mui/icons-material/Save';
 
 import { updateMapPoint, deleteMapPoint } from '../api/mapPoints';
@@ -41,17 +34,27 @@ function fmtDate(iso) {
   });
 }
 
-function InfoCard({ icon: Icon, label, value, wide, mono }) {
+function DetailField({ label, value, mono, multiline }) {
+  const valueClass = [
+    'pdp-value',
+    mono && 'pdp-value--mono',
+    multiline && 'pdp-value--multiline',
+  ].filter(Boolean).join(' ');
+
   return (
-    <div className={`pdp-card${wide ? ' pdp-card--wide' : ''}`}>
-      <div className="pdp-card-label">
-        <Icon fontSize="inherit" />
-        {label}
-      </div>
-      <div className={`pdp-card-value${mono ? ' pdp-card-value--mono' : ''}`}>
-        {value}
-      </div>
+    <div className="pdp-field">
+      <label>{label}</label>
+      <div className={valueClass}>{value}</div>
     </div>
+  );
+}
+
+function DetailSection({ title, children }) {
+  return (
+    <section className="pdp-section">
+      {title && <h3 className="pdp-section-title">{title}</h3>}
+      {children}
+    </section>
   );
 }
 
@@ -139,10 +142,12 @@ export default function PointDetailPopup({
 
   const fieldSx = {
     '& .MuiOutlinedInput-root': {
-      borderRadius: '10px',
+      borderRadius: '4px',
       backgroundColor: '#fff',
     },
   };
+
+  const titleText = editing ? 'Noktayı Düzenle' : point.name;
 
   return (
     <>
@@ -152,100 +157,92 @@ export default function PointDetailPopup({
         onClose={submitting ? undefined : onClose}
         maxWidth="sm"
         fullWidth
+        disableScrollLock
+        PaperProps={{ sx: { borderRadius: 2 } }}
       >
-        {/* Header */}
-        <div className="pdp-header">
-          <div className="pdp-header-inner">
-            <IconButton
-              className="pdp-close"
-              onClick={onClose}
-              disabled={submitting}
-              size="small"
-              aria-label="Kapat"
-            >
-              <CloseIcon fontSize="small" />
-            </IconButton>
-
-            <span className="pdp-category-chip">
-              <span className="pdp-category-dot" style={{ background: catColor }} />
-              {catLabel}
-            </span>
-
+        <DialogTitle
+          sx={{
+            bgcolor: '#37474f',
+            color: '#fff',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1,
+            py: 1.5,
+            pr: 1,
+          }}
+        >
+          <Box sx={{ flexGrow: 1, minWidth: 0 }}>
             <Typography
               variant="h6"
-              sx={{
-                mt: 1.5,
-                fontWeight: 700,
-                fontSize: '1.25rem',
-                letterSpacing: '-0.02em',
-                pr: 4,
-              }}
+              sx={{ fontSize: '1rem', fontWeight: 700, lineHeight: 1.3 }}
             >
-              {editing ? 'Noktayı Düzenle' : point.name}
+              {titleText}
             </Typography>
-
             {!editing && (
-              <Typography variant="body2" sx={{ opacity: 0.75, mt: 0.25, fontSize: '0.85rem' }}>
-                #{point.number}
-              </Typography>
+              <div className="pdp-header-meta">
+                <span className="pdp-category-badge">
+                  <span className="pdp-category-dot" style={{ background: catColor }} />
+                  {catLabel}
+                </span>
+                <span className="pdp-header-number">#{point.number}</span>
+              </div>
             )}
-          </div>
-        </div>
+          </Box>
+          <IconButton onClick={onClose} disabled={submitting} size="small" sx={{ color: '#fff' }} aria-label="Kapat">
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
 
-        <DialogContent className="pdp-body" sx={{ p: 0 }}>
+        <DialogContent sx={{ p: 0 }}>
+          <div className="pdp-content">
           {!editing ? (
             <>
-              <div className="pdp-grid">
-                <InfoCard icon={TableChartIcon} label="Numara" value={point.number} />
-                <InfoCard icon={LabelIcon} label="Kategori" value={catLabel} />
-                <InfoCard
-                  icon={MyLocationIcon}
-                  label="EPSG:4326 (WGS84)"
-                  value={fmt4326(point.longitude, point.latitude, 6)}
-                  wide
-                  mono
-                />
-                <InfoCard
-                  icon={MyLocationIcon}
-                  label="EPSG:3857 (Web Mercator)"
-                  value={fmt3857(point.xMercator, point.yMercator)}
-                  wide
-                  mono
-                />
-                <InfoCard
-                  icon={DescriptionIcon}
-                  label="Açıklama"
-                  value={point.description || 'Açıklama yok'}
-                  wide
-                />
-                <InfoCard icon={AccessTimeIcon} label="Oluşturulma" value={fmtDate(point.createdAt)} wide />
-              </div>
+              <DetailSection title="Genel bilgiler">
+                <div className="pdp-row pdp-row--2">
+                  <DetailField label="Numara" value={point.number} />
+                  <DetailField label="Kategori" value={catLabel} />
+                </div>
+              </DetailSection>
+
+              <DetailSection title="Koordinatlar">
+                <div className="pdp-row">
+                  <DetailField
+                    label="EPSG:4326 (WGS84)"
+                    value={fmt4326(point.longitude, point.latitude, 6)}
+                    mono
+                  />
+                  <DetailField
+                    label="EPSG:3857 (Web Mercator)"
+                    value={fmt3857(point.xMercator, point.yMercator)}
+                    mono
+                  />
+                </div>
+              </DetailSection>
+
+              <DetailSection title="Kayıt">
+                <div className="pdp-row">
+                  <DetailField
+                    label="Açıklama"
+                    value={point.description || 'Açıklama yok'}
+                    multiline
+                  />
+                  <DetailField label="Oluşturulma" value={fmtDate(point.createdAt)} />
+                </div>
+              </DetailSection>
 
               {admin && (
-                <div className="pdp-admin-section">
-                  <div className="pdp-admin-title">
-                    <AdminPanelSettingsIcon sx={{ fontSize: 16 }} />
-                    Ekleyen kullanıcı
+                <DetailSection title="Ekleyen kullanıcı">
+                  <div className="pdp-row pdp-row--2">
+                    <DetailField label="Kullanıcı adı" value={point.createdByUserName ?? '—'} />
+                    <DetailField label="Görünen ad" value={point.createdByDisplayName ?? '—'} />
                   </div>
-                  <div className="pdp-grid">
-                    <InfoCard
-                      icon={PersonIcon}
-                      label="Kullanıcı adı"
-                      value={point.createdByUserName ?? '—'}
-                    />
-                    <InfoCard
-                      icon={PersonIcon}
-                      label="Görünen ad"
-                      value={point.createdByDisplayName ?? '—'}
-                    />
-                  </div>
-                </div>
+                </DetailSection>
               )}
             </>
           ) : (
-            <Stack spacing={2}>
+            <Stack spacing={2} sx={{ pt: 0 }}>
               <div className="pdp-coord-banner">
-                <MyLocationIcon fontSize="small" />
+                <MyLocationIcon fontSize="small" sx={{ mt: 0.25, color: '#546e7a' }} />
                 <span>
                   {fmt4326(point.longitude, point.latitude, 5)}
                   <br />
@@ -258,6 +255,7 @@ export default function PointDetailPopup({
                 onChange={(e) => setName(e.target.value)}
                 fullWidth
                 disabled={submitting}
+                size="small"
                 sx={fieldSx}
               />
               <TextField
@@ -266,6 +264,7 @@ export default function PointDetailPopup({
                 onChange={(e) => setNumber(e.target.value)}
                 fullWidth
                 disabled={submitting}
+                size="small"
                 sx={fieldSx}
               />
               <TextField
@@ -275,6 +274,7 @@ export default function PointDetailPopup({
                 onChange={(e) => setCategory(e.target.value)}
                 fullWidth
                 disabled={submitting}
+                size="small"
                 sx={fieldSx}
               >
                 {categories.map((c) => {
@@ -294,48 +294,49 @@ export default function PointDetailPopup({
                 rows={3}
                 fullWidth
                 disabled={submitting}
+                size="small"
                 sx={fieldSx}
               />
             </Stack>
           )}
 
           {error && (
-            <Alert severity="error" sx={{ mt: 2, borderRadius: 2 }}>
+            <Alert severity="error" sx={{ mt: 2, borderRadius: 1 }}>
               {error}
             </Alert>
           )}
+          </div>
         </DialogContent>
 
-        <DialogActions className="pdp-footer" sx={{ justifyContent: 'flex-end' }}>
+        <DialogActions className="pdp-footer">
           {!editing ? (
             <>
-              <Button
-                onClick={onClose}
-                disabled={submitting}
-                sx={{ textTransform: 'none', color: '#607d8b' }}
-              >
+              <Button onClick={onClose} disabled={submitting} sx={{ textTransform: 'none' }}>
                 Kapat
               </Button>
-              <Button
-                className="pdp-btn-edit"
-                variant="outlined"
-                startIcon={<EditIcon />}
-                onClick={() => setEditing(true)}
-                disabled={submitting}
-              >
-                Düzenle
-              </Button>
-              <Button
-                className="pdp-btn-delete"
-                variant="contained"
-                color="error"
-                startIcon={<DeleteIcon />}
-                onClick={() => setDeleteOpen(true)}
-                disabled={submitting}
-                sx={{ boxShadow: '0 4px 12px rgba(211, 47, 47, 0.35)' }}
-              >
-                Sil
-              </Button>
+              <div className="pdp-footer-actions">
+                <Button
+                  variant="outlined"
+                  size="small"
+                  startIcon={<EditIcon />}
+                  onClick={() => setEditing(true)}
+                  disabled={submitting}
+                  sx={{ textTransform: 'none' }}
+                >
+                  Düzenle
+                </Button>
+                <Button
+                  variant="contained"
+                  color="error"
+                  size="small"
+                  startIcon={<DeleteIcon />}
+                  onClick={() => setDeleteOpen(true)}
+                  disabled={submitting}
+                  sx={{ textTransform: 'none' }}
+                >
+                  Sil
+                </Button>
+              </div>
             </>
           ) : (
             <>
@@ -351,22 +352,15 @@ export default function PointDetailPopup({
                 startIcon={submitting ? <CircularProgress size={18} color="inherit" /> : <SaveIcon />}
                 onClick={handleSave}
                 disabled={submitting}
-                sx={{
-                  textTransform: 'none',
-                  fontWeight: 600,
-                  borderRadius: '10px',
-                  px: 3,
-                  boxShadow: '0 4px 14px rgba(25, 118, 210, 0.4)',
-                }}
+                sx={{ textTransform: 'none' }}
               >
-                {submitting ? 'Kaydediliyor…' : 'Değişiklikleri Kaydet'}
+                {submitting ? 'Kaydediliyor…' : 'Kaydet'}
               </Button>
             </>
           )}
         </DialogActions>
       </Dialog>
 
-      {/* Silme onayı */}
       <Dialog
         className="pdp-delete-dialog"
         open={deleteOpen}
@@ -374,36 +368,19 @@ export default function PointDetailPopup({
         maxWidth="xs"
         fullWidth
       >
-        <DialogContent sx={{ textAlign: 'center', pt: 3, pb: 1 }}>
-          <Box
-            sx={{
-              width: 56,
-              height: 56,
-              borderRadius: '50%',
-              bgcolor: 'error.light',
-              color: 'error.main',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              mx: 'auto',
-              mb: 2,
-            }}
-          >
-            <WarningAmberIcon sx={{ fontSize: 32 }} />
-          </Box>
-          <Typography variant="h6" fontWeight={700} gutterBottom>
-            Noktayı silmek istiyor musunuz?
-          </Typography>
+        <DialogTitle sx={{ bgcolor: '#37474f', color: '#fff', py: 1.5, fontSize: '1rem', fontWeight: 700 }}>
+          Noktayı sil
+        </DialogTitle>
+        <DialogContent sx={{ pt: 2, pb: 1 }}>
           <Typography variant="body2" color="text.secondary">
-            <strong>{point.name}</strong> kaydı kalıcı olarak işaretlenecek ve haritadan kaldırılacak.
+            <strong>{point.name}</strong> kaydı haritadan kaldırılacak (soft delete). Devam etmek istiyor musunuz?
           </Typography>
         </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2.5, justifyContent: 'center', gap: 1 }}>
+        <DialogActions sx={{ px: 2, pb: 2, bgcolor: '#f5f5f5', borderTop: '1px solid #e0e0e0' }}>
           <Button
             onClick={() => setDeleteOpen(false)}
             disabled={submitting}
-            variant="outlined"
-            sx={{ borderRadius: 2, textTransform: 'none', minWidth: 100 }}
+            sx={{ textTransform: 'none' }}
           >
             İptal
           </Button>
@@ -412,18 +389,13 @@ export default function PointDetailPopup({
             variant="contained"
             onClick={handleDeleteConfirm}
             disabled={submitting}
-            sx={{
-              borderRadius: 2,
-              textTransform: 'none',
-              minWidth: 120,
-              fontWeight: 600,
-              boxShadow: '0 4px 12px rgba(211, 47, 47, 0.35)',
-            }}
+            sx={{ textTransform: 'none' }}
           >
-            {submitting ? 'Siliniyor…' : 'Evet, Sil'}
+            {submitting ? 'Siliniyor…' : 'Sil'}
           </Button>
         </DialogActions>
       </Dialog>
     </>
   );
 }
+

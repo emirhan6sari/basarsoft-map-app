@@ -15,6 +15,9 @@ import { PrimeReactProvider } from 'primereact/api';
 import App from './App.jsx';
 import './index.css';
 import 'ol/ol.css';
+import 'primereact/resources/themes/lara-light-blue/theme.css';
+import 'primereact/resources/primereact.min.css';
+import 'primeicons/primeicons.css';
 
 // Basit bir MUI tema. Renkleri uygulamanın "kurumsal" havasını korumak için
 // nötr tutuyoruz. Sonraki adımda customize edebiliriz (font, palette vb.).

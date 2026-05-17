@@ -21,9 +21,6 @@ import { Column } from 'primereact/column';
 import { InputText } from 'primereact/inputtext';
 import { Dropdown } from 'primereact/dropdown';
 
-import 'primereact/resources/themes/lara-light-blue/theme.css';
-import 'primereact/resources/primereact.min.css';
-import 'primeicons/primeicons.css';
 import './QueryPointsModal.css';
 
 import { listMapPoints } from '../api/mapPoints';
