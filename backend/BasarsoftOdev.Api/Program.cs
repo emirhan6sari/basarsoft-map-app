@@ -103,7 +103,9 @@ static string ResolveConnectionString(IConfiguration configuration)
         var username = Uri.UnescapeDataString(userInfo[0]);
         var password = userInfo.Length > 1 ? Uri.UnescapeDataString(userInfo[1]) : string.Empty;
         var database = uri.AbsolutePath.TrimStart('/');
-        return $"Host={uri.Host};Port={uri.Port};Database={database};Username={username};Password={password};SSL Mode=Require;Trust Server Certificate=true";
+        var railwayCs =
+            $"Host={uri.Host};Port={uri.Port};Database={database};Username={username};Password={password};SSL Mode=Require;Trust Server Certificate=true";
+        return railwayCs;
     }
 
     throw new InvalidOperationException("Connection string bulunamadı.");

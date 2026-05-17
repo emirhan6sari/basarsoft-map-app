@@ -61,7 +61,18 @@ namespace BasarsoftOdev.DAL.Data.Migrations
             migrationBuilder.AddColumn<double>(name: "YMercator", table: "map_points", type: "double precision", nullable: false, defaultValue: 0.0);
 
             migrationBuilder.Sql("""
-                UPDATE map_points SET "Longitude" = ST_X("Location"), "Latitude" = ST_Y("Location") WHERE "Location" IS NOT NULL;
+                DO $$
+                BEGIN
+                  IF EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_schema = 'public' AND table_name = 'map_points' AND column_name = 'Location'
+                  ) THEN
+                    UPDATE map_points
+                    SET "Longitude" = ST_X("Location"::geometry),
+                        "Latitude"  = ST_Y("Location"::geometry)
+                    WHERE "Location" IS NOT NULL;
+                  END IF;
+                END $$;
                 UPDATE map_points SET "XMercator" = "Longitude" * pi() / 180.0 * 6378137.0,
                     "YMercator" = ln(tan((90.0 + LEAST(GREATEST("Latitude", -85.05112878), 85.05112878)) * pi() / 360.0)) * 6378137.0
                 WHERE "Longitude" <> 0 OR "Latitude" <> 0;

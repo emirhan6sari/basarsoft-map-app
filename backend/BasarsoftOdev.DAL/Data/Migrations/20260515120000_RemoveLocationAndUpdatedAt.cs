@@ -15,15 +15,11 @@ namespace BasarsoftOdev.DAL.Data.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.Sql("""DROP INDEX IF EXISTS "IX_map_points_Location";""");
-
-            migrationBuilder.DropColumn(
-                name: "Location",
-                table: "map_points");
-
-            migrationBuilder.DropColumn(
-                name: "UpdatedAt",
-                table: "map_points");
+            migrationBuilder.Sql("""
+                DROP INDEX IF EXISTS "IX_map_points_Location";
+                ALTER TABLE map_points DROP COLUMN IF EXISTS "Location";
+                ALTER TABLE map_points DROP COLUMN IF EXISTS "UpdatedAt";
+                """);
         }
 
         /// <inheritdoc />

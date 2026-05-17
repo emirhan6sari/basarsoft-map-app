@@ -22,12 +22,19 @@ public static class DependencyInjection
         bool useInMemoryDatabase = false,
         string? inMemoryDatabaseName = null)
     {
+        NpgsqlDataSource? npgsqlDataSource = null;
+        if (!useInMemoryDatabase)
+        {
+            npgsqlDataSource = NpgsqlConnectionHelper.CreateDataSource(connectionString);
+            services.AddSingleton(npgsqlDataSource);
+        }
+
         services.AddDbContext<AppDbContext>(options =>
         {
             if (useInMemoryDatabase)
                 options.UseInMemoryDatabase(inMemoryDatabaseName ?? "BasarsoftTestDb");
             else
-                options.UseNpgsql(connectionString);
+                options.UseNpgsql(npgsqlDataSource!);
         });
 
         services.AddIdentity<ApplicationUser, IdentityRole<Guid>>(options =>
