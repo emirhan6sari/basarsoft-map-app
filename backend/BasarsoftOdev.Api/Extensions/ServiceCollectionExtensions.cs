@@ -67,7 +67,7 @@ public static class ServiceCollectionExtensions
             {
                 Title = "Başarsoft Map API",
                 Version = "v1",
-                Description = "Katmanlı mimari (API/BLL/DAL), JWT auth, Serilog logging, PostGIS.",
+                Description = "Katmanlı mimari (API/BLL/DAL), JWT auth, Serilog logging.",
             });
 
             c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme

@@ -3,6 +3,7 @@ using BasarsoftOdev.Api.Middleware;
 using BasarsoftOdev.DAL;
 using BasarsoftOdev.DAL.Data;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Serilog;
 
 Log.Logger = new LoggerConfiguration()
@@ -55,14 +56,30 @@ try
 
     app.MapGet("/", () => Results.Ok(new { name = "Başarsoft Map API", status = "running", docs = "/swagger" }));
 
-    app.MapGet("/health/db", async (AppDbContext db) =>
+    app.MapGet("/health/db", async (IConfiguration configuration) =>
     {
-        var ok = await db.Database.CanConnectAsync();
-        return ok ? Results.Ok(new { connected = true }) : Results.Problem(statusCode: 503);
+        try
+        {
+            var cs = ResolveConnectionString(configuration);
+            await using var conn = new NpgsqlConnection(cs);
+            await conn.OpenAsync();
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT 1";
+            await cmd.ExecuteScalarAsync();
+            return Results.Ok(new { connected = true });
+        }
+        catch (Exception ex)
+        {
+            return Results.Problem(
+                title: "Veritabanı bağlantı hatası",
+                detail: ex.Message,
+                statusCode: StatusCodes.Status500InternalServerError);
+        }
     }).AllowAnonymous();
 
     if (!app.Environment.IsEnvironment("Testing"))
     {
+        await PostgisCleanup.DropIfPresentAsync(connectionString, app.Logger);
         await app.ApplyMigrationsAsync();
         await app.SeedDatabaseAsync();
     }

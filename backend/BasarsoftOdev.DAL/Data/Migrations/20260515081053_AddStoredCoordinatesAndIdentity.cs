@@ -14,9 +14,6 @@ namespace BasarsoftOdev.DAL.Data.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AlterDatabase()
-                .Annotation("Npgsql:PostgresExtension:postgis", ",,");
-
             migrationBuilder.CreateTable(
                 name: "AspNetRoles",
                 columns: table => new
