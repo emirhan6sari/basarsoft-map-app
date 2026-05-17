@@ -57,7 +57,13 @@ try
     app.UseMiddleware<RequestLoggingMiddleware>();
     app.MapControllers();
 
-    app.MapGet("/", () => Results.Ok(new { name = "Başarsoft Map API", status = "running", docs = "/swagger" }));
+    app.MapGet("/", () => Results.Ok(new
+    {
+        name = "Başarsoft Map API",
+        status = "running",
+        docs = "/swagger",
+        build = "railway-20260517",
+    }));
 
     app.MapGet("/health/db", async (IConfiguration configuration, ILogger<Program> logger) =>
     {
