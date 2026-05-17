@@ -97,8 +97,22 @@ public static class ServiceCollectionExtensions
             options.AddPolicy(FrontendCorsPolicy, policy =>
             {
                 var origins = configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
-                var all = new[] { "http://localhost:5173", "http://localhost:4173" }.Concat(origins).ToArray();
-                policy.WithOrigins(all).AllowAnyHeader().AllowAnyMethod();
+                var allowed = new HashSet<string>(
+                    new[] { "http://localhost:5173", "http://localhost:4173" }
+                        .Concat(origins.Where(static o => !string.IsNullOrWhiteSpace(o))),
+                    StringComparer.OrdinalIgnoreCase);
+
+                policy
+                    .SetIsOriginAllowed(origin =>
+                    {
+                        if (string.IsNullOrWhiteSpace(origin)) return false;
+                        if (allowed.Contains(origin)) return true;
+                        // Railway: frontend ve API farklı *.up.railway.app alt alan adları
+                        return Uri.TryCreate(origin, UriKind.Absolute, out var uri)
+                            && uri.Host.EndsWith(".up.railway.app", StringComparison.OrdinalIgnoreCase);
+                    })
+                    .AllowAnyHeader()
+                    .AllowAnyMethod();
             });
         });
 
