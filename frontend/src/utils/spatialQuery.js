@@ -5,6 +5,7 @@
 import { fromLonLat } from 'ol/proj';
 import { containsCoordinate } from 'ol/extent';
 import { Polygon } from 'ol/geom';
+import { getDistance } from 'ol/sphere';
 
 export const BUFFER_DISTANCES = [
   { label: '500 m', value: 500 },
@@ -16,16 +17,26 @@ function to3857(lon, lat) {
   return fromLonLat([lon, lat]);
 }
 
-/** Merkez noktaya göre yarıçap (metre) içindeki kayıtlar */
+/**
+ * Web Mercator'da görsel bir dairenin "gerçek metre" yarıçapı için kullanılması gereken
+ * harita birimini hesaplar. EPSG:3857'de 1 birim enleme göre cos(lat) kadar gerçek metreye
+ * karşılık geldiği için tersi alınır.
+ */
+export function mercatorRadiusForMeters(latitudeDeg, realMeters) {
+  const latRad = (latitudeDeg * Math.PI) / 180;
+  const scale = Math.cos(latRad);
+  if (scale <= 0) return realMeters;
+  return realMeters / scale;
+}
+
+/**
+ * Merkez noktaya göre yarıçap (gerçek metre) içindeki kayıtlar.
+ * `ol/sphere.getDistance` ile WGS84 haversine mesafesi kullanılır — Web Mercator'un
+ * enleme bağlı bozulmasından etkilenmez.
+ */
 export function filterPointsInBuffer(points, centerLonLat, radiusM) {
-  const [cx, cy] = to3857(centerLonLat.longitude, centerLonLat.latitude);
-  const r2 = radiusM * radiusM;
-  return points.filter((p) => {
-    const [x, y] = to3857(p.longitude, p.latitude);
-    const dx = x - cx;
-    const dy = y - cy;
-    return dx * dx + dy * dy <= r2;
-  });
+  const center = [centerLonLat.longitude, centerLonLat.latitude];
+  return points.filter((p) => getDistance(center, [p.longitude, p.latitude]) <= radiusM);
 }
 
 /** Extent [minX, minY, maxX, maxY] EPSG:3857 */

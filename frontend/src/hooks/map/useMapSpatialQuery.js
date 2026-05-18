@@ -12,6 +12,7 @@ import {
   filterPointsInBuffer,
   filterPointsInExtent,
   filterPointsInPolygon,
+  mercatorRadiusForMeters,
   extentToPolygonCoords,
 } from '../../utils/spatialQuery';
 import { hasActiveDrawSketch } from '../../utils/mapFeatureUtils';
@@ -69,9 +70,10 @@ export function useMapSpatialQuery(map, loggedIn, {
     if (!bufferCenter || !querySourceRef.current) return;
 
     const center3857 = fromLonLat([bufferCenter.longitude, bufferCenter.latitude]);
+    const visualRadius = mercatorRadiusForMeters(bufferCenter.latitude, radiusM);
     querySourceRef.current.clear();
     querySourceRef.current.addFeature(new Feature({
-      geometry: new OlCircle(center3857, radiusM),
+      geometry: new OlCircle(center3857, visualRadius),
     }));
 
     const found = filterPointsInBuffer(pointsDataRef.current, bufferCenter, radiusM);
