@@ -101,7 +101,7 @@ try
         name = "Başarsoft Map API",
         status = "running",
         docs = "/swagger",
-        build = "railway-20260517b",
+        build = "railway-20260517c",
     }));
 
     app.MapGet("/health/db", async (IConfiguration configuration, ILogger<Program> logger) =>

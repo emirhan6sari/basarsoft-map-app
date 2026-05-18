@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import {
-  Box, Paper, Stack, IconButton, Button, Popover,
+  Box, Paper, Stack, IconButton, Button, Popover, Tooltip,
 } from '@mui/material';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import AddLocationAltIcon    from '@mui/icons-material/AddLocationAlt';
@@ -9,10 +9,11 @@ import LayersIcon            from '@mui/icons-material/Layers';
 import TravelExploreIcon     from '@mui/icons-material/TravelExplore';
 import UploadFileIcon        from '@mui/icons-material/UploadFile';
 import StraightenIcon        from '@mui/icons-material/Straighten';
+import CategoryIcon          from '@mui/icons-material/Category';
 
 import MapView      from './components/MapView';
 import LoginOverlay from './components/LoginOverlay';
-import { isAuthenticated, restoreSession } from './api/auth';
+import { isAuthenticated, isAdmin, restoreSession } from './api/auth';
 
 const MENU_ITEMS = [
   { mode: 'addPoint',    label: 'Nokta Ekle',     Icon: AddLocationAltIcon },
@@ -23,12 +24,22 @@ const MENU_ITEMS = [
   { mode: 'layers',      label: 'Katmanlar',      Icon: LayersIcon },
 ];
 
+const ADMIN_MENU_ITEMS = [
+  { mode: 'categories', label: 'Kategoriler', Icon: CategoryIcon, adminOnly: true },
+];
+
 function App() {
   const [activeMode, setActiveMode]   = useState(null);
   const [menuAnchor, setMenuAnchor]   = useState(null);
   // Auth state: her login/logout'ta MapView'i yeniden render için kullanılır
   const [authKey, setAuthKey]         = useState(0);
+  const [showAdminMenu, setShowAdminMenu] = useState(false);
   const menuOpen = Boolean(menuAnchor);
+
+  const visibleMenuItems = [
+    ...MENU_ITEMS,
+    ...(showAdminMenu ? ADMIN_MENU_ITEMS : []),
+  ];
 
   const openMenu  = (e) => setMenuAnchor(e.currentTarget);
   const closeMenu = ()  => setMenuAnchor(null);
@@ -61,6 +72,10 @@ function App() {
   }, []);
 
   useEffect(() => {
+    setShowAdminMenu(isAuthenticated() && isAdmin());
+  }, [authKey]);
+
+  useEffect(() => {
     const onKeyDown = (e) => {
       if (e.key !== 'Escape' || !menuOpen) return;
       closeMenu();
@@ -83,14 +98,20 @@ function App() {
           zIndex: 1100, borderRadius: '50%', backgroundColor: 'rgba(255,255,255,0.96)',
         }}
       >
-        <IconButton
-          onClick={openMenu}
-          aria-label="Menü"
-          size="medium"
-          sx={{ transform: menuOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s ease' }}
-        >
-          <KeyboardArrowDownIcon />
-        </IconButton>
+        <Tooltip title="Menü" placement="bottom" arrow>
+          <IconButton
+            onClick={openMenu}
+            aria-label="Menü"
+            size="medium"
+            sx={{
+              transform: menuOpen ? 'rotate(180deg)' : 'none',
+              transition: 'transform 0.2s ease, background-color 0.15s ease',
+              '&:hover': { backgroundColor: 'rgba(55, 84, 95, 0.1)' },
+            }}
+          >
+            <KeyboardArrowDownIcon />
+          </IconButton>
+        </Tooltip>
       </Paper>
 
       <Popover
@@ -102,7 +123,7 @@ function App() {
         slotProps={{ paper: { sx: { mt: 0.5, borderRadius: 2 } } }}
       >
         <Stack direction="row" spacing={0.5} sx={{ p: 0.75 }}>
-          {MENU_ITEMS.map(({ mode, label, Icon }) => (
+          {visibleMenuItems.map(({ mode, label, Icon }) => (
             <Button
               key={mode}
               onClick={() => handleMenuItemClick(mode)}

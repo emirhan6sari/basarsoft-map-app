@@ -1,0 +1,56 @@
+.cm-dialog .MuiDialogTitle-root {
+  background: #37474f;
+  color: #fff;
+  padding: 12px 16px;
+}
+
+.cm-dialog .MuiDialogContent-root {
+  padding: 16px;
+}
+
+.cm-form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 100px auto;
+  gap: 8px;
+  align-items: start;
+  margin-bottom: 16px;
+}
+
+@media (max-width: 700px) {
+  .cm-form-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.cm-table-wrap {
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  overflow: auto;
+  max-height: 360px;
+}
+
+.cm-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.cm-table th,
+.cm-table td {
+  padding: 8px 10px;
+  text-align: left;
+  border-bottom: 1px solid #eee;
+}
+
+.cm-table th {
+  background: #f5f5f5;
+  font-weight: 600;
+  position: sticky;
+  top: 0;
+}
+
+.cm-actions {
+  display: flex;
+  gap: 4px;
+  white-space: nowrap;
+}

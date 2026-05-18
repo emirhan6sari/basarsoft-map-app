@@ -25,8 +25,8 @@ import {
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 
 import { importMapPoints } from '../api/mapPoints';
-import { fetchCategories } from '../api/categories';
 import { estimateImportPointCount } from '../utils/geoImportUtils';
+import { sortCategories, getCategoryKey, getCategoryLabel } from '../utils/categoryUtils';
 
 const EXAMPLE_GEOJSON = `{
   "type": "FeatureCollection",
@@ -41,7 +41,7 @@ const EXAMPLE_GEOJSON = `{
 
 const EXAMPLE_WKT = 'MULTIPOINT ((32.85 39.92), (29.00 41.01))';
 
-function ImportGeometryModal({ open, onImported, onClose }) {
+function ImportGeometryModal({ open, categories: categoriesProp = [], onRefreshCategories, onImported, onClose }) {
   const fileRef = useRef(null);
   const [format, setFormat] = useState('geojson');
   const [content, setContent] = useState('');
@@ -49,28 +49,18 @@ function ImportGeometryModal({ open, onImported, onClose }) {
   const [namePrefix, setNamePrefix] = useState('İçe Aktarım');
   const [numberPrefix, setNumberPrefix] = useState('IMP');
   const [defaultDescription, setDefaultDescription] = useState('');
-  const [categories, setCategories] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const [result, setResult] = useState(null);
 
+  // MapView state — DB kategorileri (sıralı)
+  const sortedCategories = useMemo(() => sortCategories(categoriesProp), [categoriesProp]);
+
   useEffect(() => {
-    fetchCategories()
-      .then((cats) => {
-        setCategories(cats ?? []);
-        if (cats?.length > 0) setCategory(cats[0].name);
-      })
-      .catch(() => {
-        const fallback = [
-          { name: 'Depo', displayName: 'Depo' },
-          { name: 'Bayi', displayName: 'Bayi' },
-          { name: 'Musteri', displayName: 'Müşteri' },
-          { name: 'Ofis', displayName: 'Ofis' },
-        ];
-        setCategories(fallback);
-        setCategory('Depo');
-      });
-  }, []);
+    if (open && sortedCategories.length === 0 && onRefreshCategories) {
+      onRefreshCategories();
+    }
+  }, [open, sortedCategories.length, onRefreshCategories]);
 
   useEffect(() => {
     if (open) {
@@ -79,12 +69,16 @@ function ImportGeometryModal({ open, onImported, onClose }) {
       setNamePrefix('İçe Aktarım');
       setNumberPrefix('IMP');
       setDefaultDescription('');
-      if (categories.length > 0) setCategory(categories[0].name);
+      if (sortedCategories.length > 0) {
+        setCategory(getCategoryKey(sortedCategories[0]));
+      } else {
+        setCategory('');
+      }
       setError(null);
       setResult(null);
       setSubmitting(false);
     }
-  }, [open, categories]);
+  }, [open, sortedCategories]);
 
   const pointEstimate = useMemo(
     () => estimateImportPointCount(format, content),
@@ -235,13 +229,16 @@ function ImportGeometryModal({ open, onImported, onClose }) {
               onChange={(ev) => setCategory(ev.target.value)}
               size="small"
               fullWidth
-              disabled={submitting || categories.length === 0}
+              disabled={submitting || sortedCategories.length === 0}
             >
-              {categories.map((c) => (
-                <MenuItem key={c.name ?? c.id} value={c.name}>
-                  {c.displayName ?? c.name}
-                </MenuItem>
-              ))}
+              {sortedCategories.map((c) => {
+                const key = getCategoryKey(c);
+                return (
+                  <MenuItem key={key} value={key}>
+                    {getCategoryLabel(c)}
+                  </MenuItem>
+                );
+              })}
             </TextField>
 
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>

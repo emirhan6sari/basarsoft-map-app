@@ -15,6 +15,7 @@ public static class DependencyInjection
         services.AddScoped<ICoordinateTransformationService, CoordinateTransformationService>();
         services.AddScoped<IGeoGeometryParser, GeoGeometryParser>();
         services.AddScoped<IMapPointService, MapPointService>();
+        services.AddScoped<ICategoryService, CategoryService>();
         services.AddScoped<ITokenService, TokenService>();
         services.AddScoped<IAuthService, AuthService>();
 

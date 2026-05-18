@@ -1,8 +1,9 @@
 // ============================================================================
-// AddPointModal — Yeni nokta ekleme formu (kategoriler DB'den çekilir)
+// AddPointModal — Yeni nokta ekleme formu
+// Kategori listesi MapView state'inden gelir (DB /api/categories ile yüklenir).
 // ============================================================================
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Dialog, DialogTitle, DialogContent, DialogActions,
   TextField, MenuItem, Button, Stack, Typography,
@@ -11,52 +12,56 @@ import {
 
 import { createMapPoint } from '../api/mapPoints';
 import { withProximityConfirm } from '../utils/proximityConfirm';
-import { fetchCategories } from '../api/categories';
 import { fmt4326, fmt3857 } from '../utils/coordinateTransform';
+import { sortCategories, getCategoryKey, getCategoryLabel } from '../utils/categoryUtils';
 
-function AddPointModal({ open, coordinate, confirmProximityWarning = false, onCreated, onClose }) {
+function AddPointModal({
+  open,
+  coordinate,
+  categories = [],
+  onRefreshCategories,
+  confirmProximityWarning = false,
+  onCreated,
+  onClose,
+}) {
   const [name, setName]             = useState('');
   const [number, setNumber]         = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory]     = useState('');
-  const [categories, setCategories] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError]           = useState(null);
 
-  // Kategorileri API'den yükle (bir kez)
-  useEffect(() => {
-    fetchCategories()
-      .then(cats => {
-        setCategories(cats ?? []);
-        if (cats?.length > 0) setCategory(cats[0].name);
-      })
-      .catch(() => {
-        // Fallback: sabit liste
-        const fallback = [
-          { name: 'Depo',    displayName: 'Depo' },
-          { name: 'Bayi',    displayName: 'Bayi' },
-          { name: 'Musteri', displayName: 'Müşteri' },
-          { name: 'Ofis',    displayName: 'Ofis' },
-        ];
-        setCategories(fallback);
-        setCategory('Depo');
-      });
-  }, []);
+  // MapView'den gelen DB kategorileri; sıra numarasına göre sıralı
+  const sortedCategories = useMemo(() => sortCategories(categories), [categories]);
 
-  // Modal açıldığında sıfırla
+  // Liste henüz yüklenmediyse MapView'de yeniden çek
   useEffect(() => {
-    if (open) {
-      setName(''); setNumber(''); setDescription('');
-      if (categories.length > 0) setCategory(categories[0].name);
-      setError(null); setSubmitting(false);
+    if (open && sortedCategories.length === 0 && onRefreshCategories) {
+      onRefreshCategories();
     }
-  }, [open, categories]);
+  }, [open, sortedCategories.length, onRefreshCategories]);
+
+  // Modal açıldığında formu sıfırla; varsayılan kategori = ilk sıradaki
+  useEffect(() => {
+    if (!open) return;
+    setName('');
+    setNumber('');
+    setDescription('');
+    setError(null);
+    setSubmitting(false);
+    if (sortedCategories.length > 0) {
+      setCategory(getCategoryKey(sortedCategories[0]));
+    } else {
+      setCategory('');
+    }
+  }, [open, sortedCategories]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!name.trim())   { setError('Nokta adı zorunludur.');  return; }
     if (!number.trim()) { setError('Numara/Kod zorunludur.'); return; }
     if (!coordinate)    { setError('Koordinat eksik.');        return; }
+    if (!category)      { setError('Kategori seçin veya kategorilerin yüklenmesini bekleyin.'); return; }
 
     setSubmitting(true); setError(null);
     try {
@@ -84,6 +89,8 @@ function AddPointModal({ open, coordinate, confirmProximityWarning = false, onCr
       setSubmitting(false);
     }
   };
+
+  const categoriesLoading = open && sortedCategories.length === 0;
 
   return (
     <Dialog open={open} onClose={submitting ? undefined : onClose} maxWidth="xs" fullWidth>
@@ -134,15 +141,19 @@ function AddPointModal({ open, coordinate, confirmProximityWarning = false, onCr
               value={category}
               onChange={e => setCategory(e.target.value)}
               size="small" fullWidth
-              disabled={submitting || categories.length === 0}
+              disabled={submitting || categoriesLoading}
+              helperText={categoriesLoading ? 'Kategoriler veritabanından yükleniyor…' : undefined}
             >
-              {categories.length === 0
+              {categoriesLoading
                 ? <MenuItem value=""><CircularProgress size={16} sx={{ mr: 1 }} /> Yükleniyor…</MenuItem>
-                : categories.map(c => (
-                    <MenuItem key={c.name ?? c.id} value={c.name}>
-                      {c.displayName ?? c.name}
-                    </MenuItem>
-                  ))
+                : sortedCategories.map(c => {
+                    const key = getCategoryKey(c);
+                    return (
+                      <MenuItem key={key} value={key}>
+                        {getCategoryLabel(c)}
+                      </MenuItem>
+                    );
+                  })
               }
             </TextField>
 
@@ -162,7 +173,7 @@ function AddPointModal({ open, coordinate, confirmProximityWarning = false, onCr
 
         <DialogActions>
           <Button onClick={onClose} disabled={submitting}>İptal</Button>
-          <Button type="submit" variant="contained" disabled={submitting}>
+          <Button type="submit" variant="contained" disabled={submitting || categoriesLoading || !category}>
             {submitting ? 'Kaydediliyor…' : 'Kaydet'}
           </Button>
         </DialogActions>

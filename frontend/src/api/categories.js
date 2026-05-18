@@ -1,11 +1,23 @@
-import { API_BASE_URL } from './auth';
-import axios from 'axios';
+// Kategori API — GET herkese açık; CRUD yalnızca Admin
+import apiClient from './client';
+import { unwrap } from './auth';
 
-const http = axios.create({ baseURL: API_BASE_URL, timeout: 10000 });
-
+/** Tüm kategoriler (legend, dropdown) */
 export async function fetchCategories() {
-  const res = await http.get('/api/categories');
-  const body = res.data;
-  if (body?.success) return body.data;
-  return body;
+  const res = await apiClient.get('/api/categories');
+  return unwrap(res);
+}
+
+export async function createCategory(payload) {
+  const res = await apiClient.post('/api/categories', payload);
+  return unwrap(res);
+}
+
+export async function updateCategory(id, payload) {
+  const res = await apiClient.put(`/api/categories/${id}`, payload);
+  return unwrap(res);
+}
+
+export async function deleteCategory(id) {
+  await apiClient.delete(`/api/categories/${id}`);
 }

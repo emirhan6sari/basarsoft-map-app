@@ -32,6 +32,7 @@ import ImportGeometryModal from './ImportGeometryModal';
 import QueryPointsModal from './QueryPointsModal';
 import PointDetailPopup from './PointDetailPopup';
 import CategoryLegend from './CategoryLegend';
+import CategoryManageModal from './CategoryManageModal';
 import SpatialQueryToolbar from './SpatialQueryToolbar';
 import MeasurementToolbar from './MeasurementToolbar';
 import MeasurementResultPanel from './MeasurementResultPanel';
@@ -147,6 +148,7 @@ function MapView({ activeMode, onModeConsumed }) {
 
   const [modalOpen, setModalOpen] = useState(false);
   const [importModalOpen, setImportModalOpen] = useState(false);
+  const [categoryManageOpen, setCategoryManageOpen] = useState(false);
   const [pendingCoord, setPendingCoord] = useState(null);
   const [queryOpen, setQueryOpen] = useState(false);
   const [spatialResults, setSpatialResults] = useState(null);
@@ -450,7 +452,7 @@ function MapView({ activeMode, onModeConsumed }) {
   };
 
   // -------------------------------------------------------------------
-  // Yardımcı GeoJSON katmanları (il / ilçe / örnek polygon)
+  // Yardımcı GeoJSON katmanları (il / ilçe sınırları)
   // -------------------------------------------------------------------
   useEffect(() => {
     if (!map) return;
@@ -528,22 +530,24 @@ function MapView({ activeMode, onModeConsumed }) {
     return () => window.removeEventListener('auth:session-expired', onSessionExpired);
   }, [replaceAllPointsOnMap]);
 
-  // -------------------------------------------------------------------
-  // Kategoriler (bir kez)
-  // -------------------------------------------------------------------
-  useEffect(() => {
-    if (!loggedIn) return;
-    let cancelled = false;
-    fetchCategories()
+  // Giriş sonrası kategoriler DB'den; legend + nokta ekleme popup aynı listeyi kullanır
+  const reloadCategories = useCallback(() => {
+    if (!loggedIn) return Promise.resolve();
+    return fetchCategories()
       .then((cats) => {
-        if (cancelled) return;
         const categoryList = cats ?? [];
         registerCategories(categoryList);
         setCategories(categoryList);
       })
       .catch((err) => console.error('Kategoriler yüklenemedi:', err));
-    return () => { cancelled = true; };
   }, [loggedIn]);
+
+  // -------------------------------------------------------------------
+  // Kategoriler (giriş sonrası)
+  // -------------------------------------------------------------------
+  useEffect(() => {
+    reloadCategories();
+  }, [reloadCategories]);
 
   // -------------------------------------------------------------------
   // Bbox ile nokta yükleme (moveend + debounce)
@@ -690,6 +694,10 @@ function MapView({ activeMode, onModeConsumed }) {
     }
     if (activeMode === 'measure') {
       setMeasureOpen(true);
+      onModeConsumed?.();
+    }
+    if (activeMode === 'categories') {
+      setCategoryManageOpen(true);
       onModeConsumed?.();
     }
   }, [activeMode, onModeConsumed]);
@@ -1186,6 +1194,8 @@ function MapView({ activeMode, onModeConsumed }) {
       <AddPointModal
         open={modalOpen}
         coordinate={pendingCoord}
+        categories={categories}
+        onRefreshCategories={reloadCategories}
         confirmProximityWarning={confirmProximityForAdd}
         onCreated={handleCreated}
         onClose={handleModalClose}
@@ -1193,8 +1203,16 @@ function MapView({ activeMode, onModeConsumed }) {
 
       <ImportGeometryModal
         open={importModalOpen}
+        categories={categories}
+        onRefreshCategories={reloadCategories}
         onImported={handleImported}
         onClose={() => setImportModalOpen(false)}
+      />
+
+      <CategoryManageModal
+        open={categoryManageOpen}
+        onClose={() => setCategoryManageOpen(false)}
+        onChanged={reloadCategories}
       />
 
       <BufferDistanceDialog

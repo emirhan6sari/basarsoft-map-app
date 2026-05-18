@@ -2,7 +2,7 @@
  * Haritada tıklanan nokta — detay / düzenleme / silme (Sorgula modalı ile uyumlu tema).
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Dialog, DialogTitle, DialogContent, DialogActions,
   TextField, MenuItem, Button, Stack, Typography, Box,
@@ -18,6 +18,7 @@ import { updateMapPoint, deleteMapPoint } from '../api/mapPoints';
 import { withProximityConfirm } from '../utils/proximityConfirm';
 import { isAdmin } from '../api/auth';
 import { getCategoryColor } from '../utils/mapPointStyles';
+import { sortCategories, getCategoryKey, getCategoryLabel } from '../utils/categoryUtils';
 import { fmt4326, fmt3857 } from '../utils/coordinateTransform';
 import './PointDetailPopup.css';
 
@@ -67,6 +68,7 @@ export default function PointDetailPopup({
   onDeleted,
 }) {
   const admin = isAdmin();
+  const sortedCategories = useMemo(() => sortCategories(categories), [categories]);
   const [editing, setEditing] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
 
@@ -277,11 +279,11 @@ export default function PointDetailPopup({
                 size="small"
                 sx={fieldSx}
               >
-                {categories.map((c) => {
-                  const n = c.name ?? c.Name;
+                {sortedCategories.map((c) => {
+                  const n = getCategoryKey(c);
                   return (
                     <MenuItem key={n} value={n}>
-                      {c.displayName ?? c.DisplayName ?? n}
+                      {getCategoryLabel(c)}
                     </MenuItem>
                   );
                 })}

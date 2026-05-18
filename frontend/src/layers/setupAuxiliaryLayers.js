@@ -1,5 +1,5 @@
 /**
- * Yardımcı GeoJSON katmanları — il / ilçe sınırları ve örnek polygon.
+ * Yardımcı GeoJSON katmanları — il / ilçe sınırları.
  */
 
 import VectorLayer from 'ol/layer/Vector';
@@ -31,12 +31,6 @@ const AUXILIARY_LAYERS = [
     url: '/data/geo/tr-ilceler.geojson',
     style: vectorStyle('#00695c', 'rgba(0, 105, 92, 0.06)', 1),
     zIndex: 3,
-  },
-  {
-    title: 'Örnek Polygon Katmanı',
-    url: '/data/geo/ornek-polygonlar.geojson',
-    style: vectorStyle('#e65100', 'rgba(230, 81, 0, 0.18)', 2.5),
-    zIndex: 4,
   },
 ];
 

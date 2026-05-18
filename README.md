@@ -36,6 +36,7 @@ Bu depo, Başarsoft’un paylaştığı **OpenLayers tabanlı web harita** ödev
 - [Klasör Yapısı](#klasör-yapısı)
 - [Kurulum](#kurulum)
 - [Kimlik Doğrulama (JWT)](#kimlik-doğrulama-jwt)
+- [Kategori yönetimi (yalnızca Admin)](#kategori-yönetimi-yalnızca-admin)
 - [REST API](#rest-api)
 - [Konfigürasyon](#konfigürasyon)
 - [Veritabanı Yedeği](#veritabanı-yedeği)
@@ -169,7 +170,7 @@ Zorunlu 10 madde; her biri için ayrıntılı tablolar aşağıdadır.
 | PDF | Proje |
 | :--- | :--- |
 | "Add Point" -> haritada tıklama | Menü **Nokta Ekle** -> tıklama modu -> `AddPointModal` |
-| Modal: ad, numara, açıklama, kategori | Aynı alanlar; kategoriler `GET /api/categories` (Depo, Bayi, Müşteri, Ofis seed) |
+| Modal: ad, numara, açıklama, kategori | Aynı alanlar; kategoriler giriş sonrası `GET /api/categories` → `MapView` state → `AddPointModal` / legend (seed: Depo, Bayi, Müşteri, Ofis; Admin ile yeni kategori eklenebilir) |
 | Kayıt: id, ad, numara, açıklama, kategori, 4326, 3857, tarih | `MapPoint` entity + `MapPointResponseDto` |
 | Yakın koordinata ikinci nokta uyarısı | 50 m – frontend ön kontrol + API **409** `PROXIMITY_WARNING`; kullanıcı onaylarsa `confirmProximityWarning: true` ile kayıt (`proximityConfirm.js`) |
 | Veri API ile saklanır | `POST /api/MapPoints` |
@@ -193,7 +194,7 @@ Zorunlu 10 madde; her biri için ayrıntılı tablolar aşağıdadır.
 | PDF | Proje |
 | :--- | :--- |
 | Açılışta kayıtlı noktalar | Giriş sonrası tüm zoom seviyelerinde görünür alana göre bbox + `limit` ile yüklenir |
-| Kategoriye göre stil | `mapPointStyles.js`, `CategoryLegend` |
+| Kategoriye göre stil | `mapPointStyles.js`, `CategoryLegend` (sıra numarasına göre liste, grid hizalı) |
 | Çok noktada cluster, zoom'da çözülme | OpenLayers `Cluster` source; zoom arttıkça tekil noktalar |
 | 10.000+ kayıt (opsiyonel madde 5) | Bbox + zoom eşiği – [§5 performans](#5-10000-kayıt-performans-yaklaşımı-tamamlandı) |
 
@@ -246,7 +247,7 @@ Zorunlu 10 madde; her biri için ayrıntılı tablolar aşağıdadır.
 | PDF | Proje |
 | :--- | :--- |
 | OSM + nokta katmanı | Base tile + vector/cluster layer |
-| En az bir yardımcı katman | `setupAuxiliaryLayers.js` – il sınırları, ilçe sınırları, örnek polygon GeoJSON |
+| En az bir yardımcı katman | `setupAuxiliaryLayers.js` – il / ilçe sınırları (GeoJSON) |
 | Katmanları aç/kapa | `LayersPanel.jsx` |
 
 ---
@@ -289,7 +290,8 @@ Başarsoft’un ilettiği maildeki beklentiler:
 - [x] Nokta ekleme: modal ile **ad, numara, açıklama, kategori** (kategoriler veritabanından)
 - [x] Backend’den nokta listeleme ve haritada gösterme (cluster + kategori renkleri)
 - [x] Yakın nokta uyarısı (**50 m** — frontend ön kontrol + API `PROXIMITY_WARNING`; onay sonrası `confirmProximityWarning` ile kayıt)
-- [x] Katman paneli, kategori legend, harita zoom etiketi (`MapZoomLabel`), üst menü (Nokta Ekle / İçe Aktar / Ölçüm / Sorgula / Mekansal Sorgu / Katmanlar)
+- [x] Katman paneli, kategori legend, harita zoom etiketi (`MapZoomLabel`), üst menü (Nokta Ekle / İçe Aktar / Ölçüm / Sorgula / Mekansal Sorgu / Katmanlar / **Kategoriler** [Admin])
+- [x] **Kategori yönetimi (yalnızca Admin)** — [Kategori yönetimi (yalnızca Admin)](#kategori-yönetimi-yalnızca-admin)
 - [x] Nokta sorgulama tablosu (filtre, GeoJSON/CSV dışa aktarma), detay popup (görüntüle / düzenle / sil)
 - [x] Mekansal sorgu: buffer, dikdörtgen (drag box), poligon çizimi
 - [x] JWT + refresh token, **LoginOverlay** (giriş / kayıt), roller: **Admin**, **User**
@@ -377,7 +379,7 @@ BasarsoftOdev.Domain   (entity, enum, value object)
 | `Name` | Nokta adı |
 | `Number` | Numara / kod |
 | `Description` | Açıklama (opsiyonel) |
-| `Category` | Depo, Bayi, Musteri, Ofis |
+| `Category` | `categories.Name` ile eşleşen string (seed: Depo, Bayi, Musteri, Ofis; Admin CRUD ile genişletilebilir) |
 | `Longitude`, `Latitude` | EPSG:4326 (WGS84) |
 | `XMercator`, `YMercator` | EPSG:3857 (Web Mercator) |
 | `CreatedAt` | Oluşturulma tarihi |
@@ -405,8 +407,8 @@ basar_odev/
 │   └── src/
 │       ├── api/                    # auth.js, client.js, mapPoints.js, categories.js
 │       ├── hooks/                  # useOpenLayersMap, useMapPointHistory
-│       ├── utils/                  # mapBbox, mapPerformance, measureFormat, geoImportUtils, pointExport, proximityConfirm, …
-│       └── components/             # MapView, QueryPointsModal, PointDetailPopup, ImportGeometryModal, MapZoomLabel, MeasurementToolbar, UndoRedoControls, …
+│       ├── utils/                  # mapBbox, categoryUtils, mapPointStyles, geoImportUtils, pointExport, proximityConfirm, …
+│       └── components/             # MapView, CategoryLegend, CategoryManageModal, AddPointModal, QueryPointsModal, PointDetailPopup, …
 ├── database/                       # yedekler + SQL scriptleri (opsiyonel test)
 │   ├── seed_performance_test_points.sql   # 10k rastgele (PERF-*)
 │   ├── seed_basartext_points.sql          # 10k “BAŞARSOFT” yazısı (BASAR-*)
@@ -703,6 +705,37 @@ Content-Type: application/json
 | POST (oluştur / import) | Admin, User | |
 | PUT (güncelle) | Admin, User | User → yalnızca kendi noktaları |
 | DELETE | Admin, User | User → yalnızca kendi noktaları (soft delete) |
+
+---
+
+## Kategori yönetimi (yalnızca Admin)
+
+Kategori **ekleme, düzenleme ve silme** yalnızca **Admin** rolüne açıktır. **User** rolü kategori listesini okuyabilir (nokta eklerken / legend) ancak yönetim ekranına erişemez.
+
+### Yetki özeti
+
+| İşlem | API | UI |
+|--------|-----|-----|
+| Listele | `GET /api/categories` — giriş gerekmez (`AllowAnonymous`) | Tüm giriş yapmış kullanıcılar: legend, nokta ekleme/düzenleme, sorgu filtresi |
+| Oluştur | `POST /api/categories` — **Admin** | Üst menü → **Kategoriler** (`CategoryManageModal`) — yalnızca Admin görür |
+| Güncelle | `PUT /api/categories/{id}` — **Admin** | Aynı modal |
+| Sil | `DELETE /api/categories/{id}` — **Admin** | Aynı modal |
+
+Admin değilseniz menüde **Kategoriler** öğesi görünmez (`App.jsx` → `adminOnly: true`).
+
+### Kategoride yapılan değişikliklerin etkisi
+
+| Değişiklik | Ne olur? |
+|------------|----------|
+| **Yeni kategori** | Legend ve nokta ekleme / düzenleme / içe aktarma listesinde görünür (`SortOrder` sırasına göre). Harita rengi `mapPointStyles.js` paletinden atanır. |
+| **Görünen ad güncelleme** | Legend ve dropdown’larda etiket değişir; `map_points` kayıtları etkilenmez. |
+| **Sistem adı (`Name`) değişirse** | Bu ada bağlı tüm harita noktalarının `Category` alanı toplu güncellenir (`CategoryRepository.RenameMapPointsCategoryAsync`). |
+| **Sıra numarası** | Legend ve listelerde sıralama değişir. Aynı sıra başka kategoride varsa kayıt **reddedilir** (form uyarısı + API **409**). Sıra **1**’den başlar; benzersizdir (DB: `IX_categories_SortOrder`). |
+| **Silme** | Kategoriyi kullanan en az bir nokta varsa silinmez → **409**. Nokta yoksa kategori tablodan kaldırılır. |
+
+Nokta eklerken kategori listesi **veritabanından** gelir: giriş sonrası `MapView` → `GET /api/categories` → tüm ilgili bileşenlere `categories` prop ile aktarılır (`AddPointModal`, `PointDetailPopup`, `ImportGeometryModal`).
+
+**Railway / üretim:** `main` dalına push sonrası API container ayağa kalkarken bekleyen EF migration’lar otomatik uygulanır (`DatabaseInitializerHostedService` → `ApplyMigrationsAsync`). Bu sürümde kategori indeksleri: `20260517190000_AddCategoryNameUniqueIndex`, `20260517200000_AddCategorySortOrderUniqueIndex`. Loglarda `Migration uygulanıyor: …` satırını kontrol edin.
 
 ---
 
@@ -1125,6 +1158,17 @@ psql -U postgres -h localhost -d basarsoft_map -f database/delete_basartext_poin
 
 GitHub `main` dalına push sonrası otomatik deploy (örnek proje: `emirhan6sari/basarsoft-map-app`).
 
+### Veritabanı migration (otomatik)
+
+API servisi her deploy’da `DatabaseInitializerHostedService` ile bekleyen EF Core migration’ları uygular (`ApplyMigrationsAsync`). Manuel `dotnet ef database update` gerekmez. Railway API loglarında örnek:
+
+```text
+Migration uygulanıyor: 20260517190000_AddCategoryNameUniqueIndex, 20260517200000_AddCategorySortOrderUniqueIndex
+Migration tamamlandı.
+```
+
+Kategori yönetimi ve indeks ayrıntıları: [Kategori yönetimi (yalnızca Admin)](#kategori-yönetimi-yalnızca-admin).
+
 ### Servis yapılandırması
 
 | Servis | Kök dizin | Build | Not |
@@ -1294,20 +1338,29 @@ Case dokümanındaki opsiyonel maddeler ve projedeki karşılıkları.
 
 ### 7. Loglama (tamamlandı)
 
-**Yaklaşım:** Loglar dosyaya değil, **PostgreSQL'deki `app_logs` tablosuna** yazılır. Tablo Serilog tarafından ilk yazımda otomatik oluşturulur (`needAutoCreateTable: true`). Yapılandırma kodda yapılır — `backend/BasarsoftOdev.Api/Program.cs:ConfigureSerilog`.
+**Yaklaşım:** Loglar dosyaya değil, **PostgreSQL `app_logs` tablosuna** yazılır. Tablo migration + uygulama açılışında `DatabaseBootstrap.EnsureAppLogsTableAsync` ile hazırlanır.
+
+**İki kanal:**
+
+| Kanal | Ne yazar | Gecikme |
+|-------|----------|---------|
+| **`AppLogWriter`** (birincil) | HTTP istekleri, nokta CRUD, auth, hatalar — doğrudan `INSERT` | Anında |
+| **Serilog** | Console (Railway log) + isteğe bağlı PostgreSQL sink (startup vb.) | Console anında; sink batch ~2 sn |
+
+Yapılandırma: `Program.cs` (`ConfigureSerilog`), `DAL/AppLogging/AppLogWriter.cs`.
 
 #### Akış (özet)
 
 ```
 HTTP isteği
   ├─► LoggingScopeMiddleware        TraceId / UserId / UserName → Serilog LogContext
-  ├─► RequestLoggingMiddleware       method · route · status · süre (Info/Warning/Error)
-  └─► Controller → BLL servisleri    iş mantığı logları (AuthService, MapPointService, …)
-       └─► (hata) ExceptionHandlingMiddleware → ApiResponse + LogError/LogWarning
+  ├─► RequestLoggingMiddleware       HTTP log → Serilog + AppLogWriter
+  └─► BLL (AuthService, MapPointService, …)  iş kuralı logları → Serilog + AppLogWriter
+       └─► ExceptionHandlingMiddleware → hata logu → Serilog + AppLogWriter
 
-Serilog pipeline (Program.cs:ConfigureSerilog)
-  ├─► Console sink         (Railway log streaming + dev terminal)
-  └─► PostgreSQL sink      tablo: app_logs   batch: 50 / 5 sn   level: Information+
+Serilog (Program.cs)
+  ├─► Console sink
+  └─► PostgreSQL sink (ek; batch) — tablo önceden oluşturulmuş olmalı
 ```
 
 #### Sink'ler
@@ -1360,11 +1413,15 @@ Serilog pipeline (Program.cs:ConfigureSerilog)
 
 DB sink ayrıntıları kod tarafında: `Program.cs:ConfigureSerilog` (batch size, period, column writers).
 
-#### İş mantığı logları (BLL)
+#### İş mantığı logları (`AppLogWriter` + Serilog)
 
-- `AuthService` — giriş başarısız/başarılı, kayıt, çıkış, token yenileme
-- `MapPointService` — CRUD, bbox kısaltma (`truncated`), import
-- `CategoryService` — kategori ekleme/güncelleme
+- `AuthService` — giriş başarısız/başarılı, kayıt, çıkış
+- `MapPointService` — oluşturma, güncelleme, soft-delete, içe aktarım; liste kısaltma (`truncated`) yalnızca Serilog
+- `CategoryService` — kategori oluşturma, güncelleme, silme (Admin)
+
+#### Kategoriler
+
+Yetki ve kategori değişikliklerinin haritaya etkisi: [Kategori yönetimi (yalnızca Admin)](#kategori-yönetimi-yalnızca-admin). İşlem logları: `CategoryService` → `app_logs`.
 
 #### API yanıtı ile eşleşme
 
@@ -1378,7 +1435,7 @@ WHERE trace_id = '00-abc...-def-01'
 ORDER BY timestamp ASC;
 ```
 
-> Dosyaya log yazılmaz; eskiden kullanılan `backend/BasarsoftOdev.Api/Logs/` klasörü artık üretilmez. `.gitignore`'da bırakılmıştır (yanlışlıkla geri eklenmemesi için).
+> Dosyaya log yazılmaz (yalnızca PostgreSQL `app_logs` + Railway Console).
 
 ---
 
@@ -1415,10 +1472,13 @@ Temel ödev + opsiyonel maddeler tamamlandıktan sonra eklenen başlıca gelişt
 | **Admin ekleyen** | Bbox harita listesinde `createdByUserName` / `createdByDisplayName`; oluşturma yanıtında `CreatedBy` include; detay popup’ta düzenlemeden önce de görünür |
 | **Türkçe UI** | `QueryPointsModal` placeholder ve mesajlarda UTF-8 (ör. **Tümü**, **İsme göre ara…**) |
 | **Yerel API** | `appsettings.json` şablon JWT secret (yalnızca geliştirme; üretimde Railway env) |
-| **Loglama (tablo)** | Dosya tabanlı log kaldırıldı; Serilog → PostgreSQL `app_logs` tablosu (`Serilog.Sinks.Postgresql.Alternative`, auto-create, JSONB `properties`) — `Program.cs:ConfigureSerilog` |
+| **Loglama (tablo)** | `app_logs` + `AppLogWriter` (doğrudan INSERT); Serilog Console + opsiyonel PG sink — `Program.cs`, `DAL/AppLogging/AppLogWriter.cs` |
+| **Üst menü** | Ok simgesine hover: **Menü** tooltip (`App.jsx`) |
 | **Kod yorumları** | `Program.cs`, `LoggingScopeMiddleware`, `RequestLoggingMiddleware`, `ExceptionHandlingMiddleware`, `SeedDatabaseAsync` üzerine açıklayıcı XML/inline yorumlar |
+| **Kategori (Admin)** | Yönetim yalnızca Admin; değişiklik etkileri README → [Kategori yönetimi](#kategori-yönetimi-yalnızca-admin) |
+| **Yardımcı katman** | Örnek polygon katmanı kaldırıldı; yalnızca il / ilçe sınırları |
 
-İlgili bölümler: [§2 Nokta ekleme](#2-nokta-ekleme), [§5 Güncelleme](#5-nokta-güncelleme-ve-silme), [REST API](#rest-api), [Opsiyonel Geliştirmeler](#opsiyonel-geliştirmeler), [Canlı Yayın](#canlı-yayın-railway).
+İlgili bölümler: [Kategori yönetimi (yalnızca Admin)](#kategori-yönetimi-yalnızca-admin), [Canlı Yayın (Railway)](#canlı-yayın-railway).
 
 ---
 

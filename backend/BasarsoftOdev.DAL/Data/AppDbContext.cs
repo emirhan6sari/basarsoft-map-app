@@ -59,6 +59,8 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<Guid
             entity.HasKey(c => c.Id);
             entity.Property(c => c.Name).IsRequired().HasMaxLength(64);
             entity.Property(c => c.DisplayName).HasMaxLength(128);
+            entity.HasIndex(c => c.Name).IsUnique();
+            entity.HasIndex(c => c.SortOrder).IsUnique(); // Sıra numarası çakışması engellenir
             entity.HasData(
                 new Category { Id = 1, Name = "Depo",    DisplayName = "Depo",    SortOrder = 1 },
                 new Category { Id = 2, Name = "Bayi",    DisplayName = "Bayi",    SortOrder = 2 },
