@@ -10,6 +10,7 @@ using Microsoft.IdentityModel.Tokens;
 
 namespace BasarsoftOdev.BLL.Services;
 
+/// <summary>Access (JWT) ve rastgele refresh token üretimi.</summary>
 public class TokenService : ITokenService
 {
     private readonly JwtSettings _settings;

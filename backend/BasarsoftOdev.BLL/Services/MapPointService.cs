@@ -11,11 +11,17 @@ using Microsoft.Extensions.Options;
 
 namespace BasarsoftOdev.BLL.Services;
 
+/// <summary>
+/// Harita noktası iş kuralları: liste yetkisi, koordinat çözümleme, yakınlık kontrolü ve GeoJSON/WKT içe aktarım.
+/// </summary>
 public class MapPointService : IMapPointService
 {
-    private readonly IMapPointRepository _repository;
+    private readonly IMapPointQueryRepository _queries;
+    private readonly IMapPointCommandRepository _commands;
     private readonly ICoordinateTransformationService _coordinates;
     private readonly IGeoGeometryParser _geoParser;
+    private readonly IMapPointAccessPolicyResolver _accessPolicyResolver;
+    private readonly IMapPointListQuerySelector _listQuerySelector;
     private readonly ILogger<MapPointService> _logger;
     private readonly IAppLogWriter _appLogWriter;
     private readonly double _proximityRadiusMeters;
@@ -23,16 +29,22 @@ public class MapPointService : IMapPointService
     private readonly int _listMaxResults;
 
     public MapPointService(
-        IMapPointRepository repository,
+        IMapPointQueryRepository queries,
+        IMapPointCommandRepository commands,
         ICoordinateTransformationService coordinates,
         IGeoGeometryParser geoParser,
+        IMapPointAccessPolicyResolver accessPolicyResolver,
+        IMapPointListQuerySelector listQuerySelector,
         ILogger<MapPointService> logger,
         IAppLogWriter appLogWriter,
         IOptions<MapSettings> mapSettings)
     {
-        _repository = repository;
+        _queries = queries;
+        _commands = commands;
         _coordinates = coordinates;
         _geoParser = geoParser;
+        _accessPolicyResolver = accessPolicyResolver;
+        _listQuerySelector = listQuerySelector;
         _logger = logger;
         _appLogWriter = appLogWriter;
         _proximityRadiusMeters = mapSettings.Value.ProximityRadiusMeters;
@@ -41,37 +53,19 @@ public class MapPointService : IMapPointService
     }
 
     public async Task<MapPointListResultDto> ListAsync(
-        Guid? requestingUserId,
-        bool isAdmin,
+        MapPointAccessContext access,
         MapPointBBoxDto? bbox = null,
         int? limit = null,
         CancellationToken cancellationToken = default)
     {
+        var policy = _accessPolicyResolver.Resolve(access);
         var cap = bbox is null ? _listMaxResults : _bboxMaxResults;
         var take = Math.Clamp(limit ?? cap, 1, cap);
 
-        IReadOnlyList<MapPoint> entities;
-        int totalCount;
+        var listQuery = _listQuerySelector.Select(access);
+        var (entities, totalCount) = await listQuery.ExecuteAsync(access, bbox, take, cancellationToken);
 
-        if (isAdmin)
-        {
-            (entities, totalCount) = bbox is null
-                ? await _repository.GetAllLimitedAsync(take, cancellationToken)
-                : await _repository.GetAllWithinBBoxAsync(bbox, take, cancellationToken);
-        }
-        else if (requestingUserId.HasValue)
-        {
-            (entities, totalCount) = bbox is null
-                ? await _repository.GetByUserLimitedAsync(requestingUserId.Value, take, cancellationToken)
-                : await _repository.GetByUserWithinBBoxAsync(requestingUserId.Value, bbox, take, cancellationToken);
-        }
-        else
-        {
-            entities = [];
-            totalCount = 0;
-        }
-
-        var items = entities.Select(e => ToDto(e, includeCreatorInfo: isAdmin)).ToList();
+        var items = entities.Select(e => ToDto(e, policy.IncludeCreatorInfo)).ToList();
         var returned = items.Count;
 
         if (totalCount > returned)
@@ -94,12 +88,15 @@ public class MapPointService : IMapPointService
         };
     }
 
-    public async Task<MapPointResponseDto?> GetByIdAsync(Guid id, Guid requestingUserId, bool isAdmin, CancellationToken cancellationToken = default)
+    public async Task<MapPointResponseDto?> GetByIdAsync(
+        Guid id, MapPointAccessContext access, CancellationToken cancellationToken = default)
     {
-        var entity = await _repository.GetByIdAsync(id, cancellationToken);
+        var entity = await _queries.GetByIdAsync(id, cancellationToken);
         if (entity is null) return null;
-        EnsureCanAccess(entity, requestingUserId, isAdmin);
-        return ToDto(entity, isAdmin);
+
+        var policy = _accessPolicyResolver.Resolve(access);
+        policy.EnsureCanRead(entity, access);
+        return ToDto(entity, policy.IncludeCreatorInfo);
     }
 
     public async Task<MapPointResponseDto> CreateAsync(MapPointCreateDto dto, Guid createdByUserId, CancellationToken cancellationToken = default)
@@ -120,7 +117,7 @@ public class MapPointService : IMapPointService
         };
         ApplyCoordinates(entity, coords);
 
-        await _repository.AddAsync(entity, cancellationToken);
+        await _commands.AddAsync(entity, cancellationToken);
         _logger.LogInformation("MapPoint oluşturuldu: {Id} ({Name}) by user {UserId}", entity.Id, entity.Name, createdByUserId);
         await _appLogWriter.WriteAsync(new AppLogEntry(
             "Information",
@@ -134,16 +131,18 @@ public class MapPointService : IMapPointService
                 ["Category"] = entity.Category,
             }),
             cancellationToken);
-        var created = await _repository.GetByIdAsync(entity.Id, cancellationToken);
+        var created = await _queries.GetByIdAsync(entity.Id, cancellationToken);
         return ToDto(created ?? entity, includeCreatorInfo: true);
     }
 
-    public async Task<MapPointResponseDto?> UpdateAsync(Guid id, MapPointUpdateDto dto, Guid requestingUserId, bool isAdmin, CancellationToken cancellationToken = default)
+    public async Task<MapPointResponseDto?> UpdateAsync(
+        Guid id, MapPointUpdateDto dto, MapPointAccessContext access, CancellationToken cancellationToken = default)
     {
-        var entity = await _repository.GetByIdAsync(id, cancellationToken);
+        var entity = await _queries.GetByIdAsync(id, cancellationToken);
         if (entity is null) return null;
 
-        EnsureCanModify(entity, requestingUserId, isAdmin);
+        var policy = _accessPolicyResolver.Resolve(access);
+        policy.EnsureCanModify(entity, access);
 
         var coords = _coordinates.Resolve(dto.Longitude, dto.Latitude, dto.XMercator, dto.YMercator);
         if (!dto.ConfirmProximityWarning)
@@ -155,18 +154,21 @@ public class MapPointService : IMapPointService
         entity.Category = dto.Category.Trim();
         ApplyCoordinates(entity, coords);
 
-        await _repository.UpdateAsync(entity, cancellationToken);
+        await _commands.UpdateAsync(entity, cancellationToken);
         _logger.LogInformation("MapPoint güncellendi: {Id}", id);
         await _appLogWriter.WriteAsync(new AppLogEntry(
             "Information",
             $"MapPoint güncellendi: {id}",
             SourceContext: nameof(MapPointService),
-            UserId: requestingUserId.ToString(),
+            UserId: access.UserId.ToString(),
             Properties: new Dictionary<string, object?> { ["Id"] = id }),
             cancellationToken);
-        return ToDto(entity, isAdmin);
+        return ToDto(entity, policy.IncludeCreatorInfo);
     }
 
+    /// <summary>
+    /// Her aday ayrı değerlendirilir; hatalı veya çok yakın olanlar atlanır, geçenler toplu kaydedilir.
+    /// </summary>
     public async Task<MapPointImportResultDto> ImportAsync(
         MapPointImportRequestDto request,
         Guid createdByUserId,
@@ -250,7 +252,7 @@ public class MapPointService : IMapPointService
         }
 
         if (created.Count > 0)
-            await _repository.AddRangeAsync(created, cancellationToken);
+            await _commands.AddRangeAsync(created, cancellationToken);
 
         _logger.LogInformation(
             "MapPoint içe aktarım: {Created} kayıt, {Skipped} atlandı — user {UserId}",
@@ -278,41 +280,29 @@ public class MapPointService : IMapPointService
         };
     }
 
-    public async Task<bool> DeleteAsync(Guid id, Guid requestingUserId, bool isAdmin, CancellationToken cancellationToken = default)
+    public async Task<bool> DeleteAsync(Guid id, MapPointAccessContext access, CancellationToken cancellationToken = default)
     {
-        var entity = await _repository.GetByIdAsync(id, cancellationToken);
+        var entity = await _queries.GetByIdAsync(id, cancellationToken);
         if (entity is null) return false;
 
-        EnsureCanModify(entity, requestingUserId, isAdmin);
-        await _repository.SoftDeleteAsync(id, requestingUserId, cancellationToken);
-        _logger.LogInformation("MapPoint soft-delete: {Id} by {UserId}", id, requestingUserId);
+        var policy = _accessPolicyResolver.Resolve(access);
+        policy.EnsureCanModify(entity, access);
+        await _commands.SoftDeleteAsync(id, access.UserId, cancellationToken);
+        _logger.LogInformation("MapPoint soft-delete: {Id} by {UserId}", id, access.UserId);
         await _appLogWriter.WriteAsync(new AppLogEntry(
             "Information",
             $"MapPoint silindi (soft-delete): {id}",
             SourceContext: nameof(MapPointService),
-            UserId: requestingUserId.ToString(),
+            UserId: access.UserId.ToString(),
             Properties: new Dictionary<string, object?> { ["Id"] = id }),
             cancellationToken);
         return true;
     }
 
-    private static void EnsureCanAccess(MapPoint entity, Guid userId, bool isAdmin)
-    {
-        if (isAdmin) return;
-        if (entity.CreatedByUserId != userId)
-            throw new ForbiddenBusinessException("Bu noktayı görüntüleme yetkiniz yok.");
-    }
-
-    private static void EnsureCanModify(MapPoint entity, Guid userId, bool isAdmin)
-    {
-        if (isAdmin) return;
-        if (entity.CreatedByUserId != userId)
-            throw new ForbiddenBusinessException("Bu noktayı değiştirme yetkiniz yok.");
-    }
-
+    /// <summary>EPSG:3857 düzleminde kare mesafe — yakınlık eşiği appsettings Map:ProximityRadiusMeters.</summary>
     private async Task EnsureNotTooCloseAsync(double x, double y, Guid? excludeId, CancellationToken cancellationToken)
     {
-        var nearby = await _repository.GetWithinMercatorRadiusAsync(x, y, _proximityRadiusMeters, cancellationToken);
+        var nearby = await _queries.GetWithinMercatorRadiusAsync(x, y, _proximityRadiusMeters, cancellationToken);
         var conflict = nearby.FirstOrDefault(p => excludeId is null || p.Id != excludeId.Value);
         if (conflict is not null)
         {
@@ -323,7 +313,7 @@ public class MapPointService : IMapPointService
         }
     }
 
-    private static void ApplyCoordinates(MapPoint entity, Domain.ValueObjects.GeoCoordinateSet coords)
+    private static void ApplyCoordinates(MapPoint entity, GeoCoordinateSet coords)
     {
         entity.Longitude = coords.Longitude;
         entity.Latitude = coords.Latitude;
@@ -331,6 +321,7 @@ public class MapPointService : IMapPointService
         entity.YMercator = coords.YMercator;
     }
 
+    /// <summary>GeoJSON bazen 3857 değerlerini lon/lat alanına yazar; büyüklükten ayırt edilir.</summary>
     private GeoCoordinateSet ResolveCandidateCoordinates(GeoImportCandidate candidate)
     {
         var lon = candidate.Longitude;

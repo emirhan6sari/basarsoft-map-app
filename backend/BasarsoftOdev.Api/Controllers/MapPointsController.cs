@@ -9,6 +9,10 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace BasarsoftOdev.Api.Controllers;
 
+/// <summary>
+/// Harita noktaları REST uçları. İş kuralları <see cref="IMapPointService"/> içinde;
+/// controller yalnızca yetki bağlamını oluşturup sonucu <see cref="ApiResponse{T}"/> ile döner.
+/// </summary>
 [ApiController]
 [Route("api/[controller]")]
 [Authorize]
@@ -29,8 +33,14 @@ public class MapPointsController : ControllerBase
             ?? User.FindFirstValue("sub")
             ?? throw new InvalidOperationException("Kullanıcı kimliği alınamadı."));
 
-    private bool IsAdmin => User.IsInRole("Admin");
+    /// <summary>JWT'deki kullanıcı ve roller — liste/okuma/güncelleme yetkisi serviste çözülür.</summary>
+    private MapPointAccessContext AccessContext => new()
+    {
+        UserId = CurrentUserId,
+        Roles = User.FindAll(ClaimTypes.Role).Select(c => c.Value).ToList(),
+    };
 
+    /// <summary>Harita bbox'ına göre nokta listesi. Admin tümünü, User yalnızca kendi kayıtlarını görür.</summary>
     [HttpGet]
     [Authorize(Roles = "Admin,User")]
     [ProducesResponseType(typeof(ApiResponse<MapPointListResultDto>), StatusCodes.Status200OK)]
@@ -44,6 +54,7 @@ public class MapPointsController : ControllerBase
     {
         MapPointBBoxDto? bbox = null;
         var hasAny = minLon.HasValue || minLat.HasValue || maxLon.HasValue || maxLat.HasValue;
+        // Kısmi bbox parametresi kabul edilmez — dört köşe birlikte gelmeli
         if (hasAny)
         {
             if (!minLon.HasValue || !minLat.HasValue || !maxLon.HasValue || !maxLat.HasValue)
@@ -71,20 +82,22 @@ public class MapPointsController : ControllerBase
         if (limit is < 1)
             throw new BusinessException(ErrorCodes.Validation, "limit en az 1 olmalıdır.");
 
-        var result = await _service.ListAsync(CurrentUserId, IsAdmin, bbox, limit, ct);
+        var result = await _service.ListAsync(AccessContext, bbox, limit, ct);
         return Ok(ApiResponse<MapPointListResultDto>.Ok(result, HttpContext.TraceIdentifier));
     }
 
+    /// <summary>Tekil nokta. User başkasının kaydına erişemez (403).</summary>
     [HttpGet("{id:guid}")]
     [Authorize(Roles = "Admin,User")]
     public async Task<ActionResult<ApiResponse<MapPointResponseDto>>> GetById(Guid id, CancellationToken ct)
     {
-        var item = await _service.GetByIdAsync(id, CurrentUserId, IsAdmin, ct);
+        var item = await _service.GetByIdAsync(id, AccessContext, ct);
         if (item is null)
             return NotFound(ApiResponse<MapPointResponseDto>.Fail(ErrorCodes.NotFound, $"Nokta bulunamadı: {id}", HttpContext.TraceIdentifier));
         return Ok(ApiResponse<MapPointResponseDto>.Ok(item, HttpContext.TraceIdentifier));
     }
 
+    /// <summary>Yeni nokta. Koordinat dönüşümü ve yakınlık kontrolü serviste yapılır.</summary>
     [HttpPost]
     [Authorize(Roles = "Admin,User")]
     [ProducesResponseType(typeof(ApiResponse<MapPointResponseDto>), StatusCodes.Status201Created)]
@@ -97,16 +110,18 @@ public class MapPointsController : ControllerBase
             ApiResponse<MapPointResponseDto>.Ok(created, HttpContext.TraceIdentifier));
     }
 
+    /// <summary>Güncelleme — User yalnızca kendi noktasını değiştirebilir.</summary>
     [HttpPut("{id:guid}")]
     [Authorize(Roles = "Admin,User")]
     public async Task<ActionResult<ApiResponse<MapPointResponseDto>>> Update(Guid id, [FromBody] MapPointUpdateDto dto, CancellationToken ct)
     {
-        var updated = await _service.UpdateAsync(id, dto, CurrentUserId, IsAdmin, ct);
+        var updated = await _service.UpdateAsync(id, dto, AccessContext, ct);
         if (updated is null)
             return NotFound(ApiResponse<MapPointResponseDto>.Fail(ErrorCodes.NotFound, $"Güncellenecek nokta yok: {id}", HttpContext.TraceIdentifier));
         return Ok(ApiResponse<MapPointResponseDto>.Ok(updated, HttpContext.TraceIdentifier));
     }
 
+    /// <summary>GeoJSON veya WKT toplu içe aktarım (en fazla 500 nokta / istek).</summary>
     [HttpPost("import")]
     [Authorize(Roles = "Admin,User")]
     [ProducesResponseType(typeof(ApiResponse<MapPointImportResultDto>), StatusCodes.Status200OK)]
@@ -118,12 +133,13 @@ public class MapPointsController : ControllerBase
         return Ok(ApiResponse<MapPointImportResultDto>.Ok(result, HttpContext.TraceIdentifier));
     }
 
+    /// <summary>Soft delete — kayıt veritabanında kalır, listeden düşer.</summary>
     [HttpDelete("{id:guid}")]
     [Authorize(Roles = "Admin,User")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
     {
-        var deleted = await _service.DeleteAsync(id, CurrentUserId, IsAdmin, ct);
+        var deleted = await _service.DeleteAsync(id, AccessContext, ct);
         if (!deleted)
             return NotFound(ApiResponse<object>.Fail(ErrorCodes.NotFound, $"Silinecek nokta yok: {id}", HttpContext.TraceIdentifier));
         return NoContent();

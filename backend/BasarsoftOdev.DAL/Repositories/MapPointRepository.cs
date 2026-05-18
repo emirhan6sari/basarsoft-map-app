@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BasarsoftOdev.DAL.Repositories;
 
+/// <summary>MapPoint EF sorguları — bbox WGS84 alanları, yakınlık EPSG:3857 kare mesafe.</summary>
 public class MapPointRepository : IMapPointRepository
 {
     private readonly AppDbContext _db;

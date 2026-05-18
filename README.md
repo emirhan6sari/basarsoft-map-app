@@ -247,7 +247,7 @@ Zorunlu 10 madde; her biri için ayrıntılı tablolar aşağıdadır.
 | PDF | Proje |
 | :--- | :--- |
 | OSM + nokta katmanı | Base tile + vector/cluster layer |
-| En az bir yardımcı katman | `setupAuxiliaryLayers.js` – il / ilçe sınırları (GeoJSON) |
+| En az bir yardımcı katman | `frontend/src/layers/setupAuxiliaryLayers.js` – il / ilçe sınırları (GeoJSON) |
 | Katmanları aç/kapa | `LayersPanel.jsx` |
 
 ---
@@ -272,7 +272,7 @@ Başarsoft’un ilettiği maildeki beklentiler:
 | # | Kontrol | Not |
 |---|---------|-----|
 | 1 | Proje sorunsuz çalışıyor | [Hızlı başlangıç](#hızlı-başlangıç) + `dotnet test` |
-| 2 | **PostgreSQL yedeği** eklendi | `database/basarsoft_map_backup.backup` — [oluşturma](#veritabanı-yedeği) |
+| 2 | **PostgreSQL yedeği** eklendi | `basarsoft_map_backup.backup` (proje kökünde) — [oluşturma](#veritabanı-yedeği) |
 | 3 | README’de ad / iletişim dolu | Üst bilgi satırı |
 | 4 | Secret dosyalar repoda yok | `appsettings.Development.json`, `.env` — `.gitignore` |
 | 5 | 19 Mayıs 2026 23:59 öncesi iletim | Zip veya repo linki |
@@ -920,7 +920,7 @@ Ortam değişkeni örneği: `ConnectionStrings__DefaultConnection`, `Jwt__Secret
 
 ## Veritabanı Yedeği
 
-> **Teslim zorunluluğu:** PostgreSQL kullanıldığı için ödev tesliminde `pg_dump` yedeği paylaşılmalıdır (`database/basarsoft_map_backup.backup`).
+> **Teslim zorunluluğu:** PostgreSQL kullanıldığı için ödev tesliminde `pg_dump` yedeği paylaşılmalıdır. Bu projede yedek proje kök dizinine konur: `basarsoft_map_backup.backup`.
 
 ### Yedek oluşturma (aday)
 
@@ -928,7 +928,7 @@ Teslim öncesi:
 
 ```powershell
 $env:PGPASSWORD = "YOUR_POSTGRES_PASSWORD"
-pg_dump -U postgres -h localhost -d basarsoft_map -F c -f database/basarsoft_map_backup.backup
+pg_dump -U postgres -h localhost -d basarsoft_map -F c -f basarsoft_map_backup.backup
 ```
 
 ### Yedek ile kurulum (değerlendirici)
@@ -941,7 +941,7 @@ pg_dump -U postgres -h localhost -d basarsoft_map -F c -f database/basarsoft_map
 Geri yükleme:
 
 ```powershell
-pg_restore -U postgres -h localhost -d basarsoft_map -c database/basarsoft_map_backup.backup
+pg_restore -U postgres -h localhost -d basarsoft_map -c basarsoft_map_backup.backup
 ```
 
 Manuel şema yükseltme (nadir):
@@ -1476,7 +1476,6 @@ Temel ödev + opsiyonel maddeler tamamlandıktan sonra eklenen başlıca gelişt
 | **Üst menü** | Ok simgesine hover: **Menü** tooltip (`App.jsx`) |
 | **Kod yorumları** | `Program.cs`, `LoggingScopeMiddleware`, `RequestLoggingMiddleware`, `ExceptionHandlingMiddleware`, `SeedDatabaseAsync` üzerine açıklayıcı XML/inline yorumlar |
 | **Kategori (Admin)** | Yönetim yalnızca Admin; değişiklik etkileri README → [Kategori yönetimi](#kategori-yönetimi-yalnızca-admin) |
-| **Yardımcı katman** | Örnek polygon katmanı kaldırıldı; yalnızca il / ilçe sınırları |
 
 İlgili bölümler: [Kategori yönetimi (yalnızca Admin)](#kategori-yönetimi-yalnızca-admin), [Canlı Yayın (Railway)](#canlı-yayın-railway).
 

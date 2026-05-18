@@ -4,6 +4,9 @@ using BasarsoftOdev.Domain.ValueObjects;
 
 namespace BasarsoftOdev.BLL.Services;
 
+/// <summary>
+/// WGS84 (EPSG:4326) ile Web Mercator (EPSG:3857) dönüşümü. İkisi birlikte gelirse tutarlılık kontrol edilir.
+/// </summary>
 public class CoordinateTransformationService : ICoordinateTransformationService
 {
     private const double EarthRadiusMeters = 6378137.0;
@@ -22,6 +25,7 @@ public class CoordinateTransformationService : ICoordinateTransformationService
         return new GeoCoordinateSet(lon, lat, xMercator, yMercator);
     }
 
+    /// <summary>İki CRS birlikte gönderildiyse Mercator farkı bu eşiğin üstündeyse 400.</summary>
     private const double MercatorToleranceMeters = 0.5;
 
     public GeoCoordinateSet Resolve(double? longitude, double? latitude, double? xMercator, double? yMercator)

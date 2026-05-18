@@ -1,6 +1,7 @@
 using BasarsoftOdev.BLL.Interfaces;
 using BasarsoftOdev.BLL.Options;
 using BasarsoftOdev.BLL.Services;
+using BasarsoftOdev.BLL.Services.MapPoints;
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -19,7 +20,21 @@ public static class DependencyInjection
         services.AddScoped<ITokenService, TokenService>();
         services.AddScoped<IAuthService, AuthService>();
 
+        AddMapPointAccessPolicies(services);
+
         return services;
+    }
+
+    /// <summary>MapPoint rol politikaları ve liste sorguları (OCP).</summary>
+    private static void AddMapPointAccessPolicies(IServiceCollection services)
+    {
+        services.AddScoped<AdminMapPointAccessPolicy>();
+        services.AddScoped<UserMapPointAccessPolicy>();
+        services.AddScoped<IMapPointAccessPolicyResolver, MapPointAccessPolicyResolver>();
+
+        services.AddScoped<IMapPointListQuery, AdminMapPointListQuery>();
+        services.AddScoped<IMapPointListQuery, UserMapPointListQuery>();
+        services.AddScoped<IMapPointListQuerySelector, MapPointListQuerySelector>();
     }
 
     public static IServiceCollection AddBusinessOptions(this IServiceCollection services, Microsoft.Extensions.Configuration.IConfiguration configuration)

@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BasarsoftOdev.DAL.Repositories;
 
+/// <summary>Kategori tablosu; map_points.Category ile isim üzerinden bağlantı.</summary>
 public class CategoryRepository : ICategoryRepository
 {
     private readonly AppDbContext _db;

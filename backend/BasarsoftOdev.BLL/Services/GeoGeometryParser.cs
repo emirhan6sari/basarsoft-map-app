@@ -8,6 +8,9 @@ using NetTopologySuite.IO;
 
 namespace BasarsoftOdev.BLL.Services;
 
+/// <summary>
+/// GeoJSON veya WKT içinden nokta adayları çıkarır. Çizgi/çokgen köşeleri ayrı kayıt olur (en fazla 500).
+/// </summary>
 public class GeoGeometryParser : IGeoGeometryParser
 {
     private const int MaxPoints = 500;
@@ -158,6 +161,7 @@ public class GeoGeometryParser : IGeoGeometryParser
         }).ToList();
     }
 
+    /// <summary>Point, LineString, Polygon ve çoklu varyantları düğümlere indirger.</summary>
     private static void CollectCoordinates(Geometry geometry, ICollection<Coordinate> target)
     {
         switch (geometry)

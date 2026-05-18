@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace BasarsoftOdev.Api.Controllers;
 
+/// <summary>Giriş, kayıt, token yenileme ve oturum kapatma.</summary>
 [ApiController]
 [Route("api/[controller]")]
 public class AuthController : ControllerBase

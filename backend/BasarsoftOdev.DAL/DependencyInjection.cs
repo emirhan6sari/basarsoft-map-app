@@ -53,9 +53,18 @@ public static class DependencyInjection
             .AddDefaultTokenProviders()
             .AddErrorDescriber<TurkishIdentityErrorDescriber>();
 
-        services.AddScoped<IMapPointRepository, MapPointRepository>();
+        services.AddScoped<MapPointRepository>();
+        services.AddScoped<IMapPointRepository>(sp => sp.GetRequiredService<MapPointRepository>());
+        services.AddScoped<IMapPointQueryRepository>(sp => sp.GetRequiredService<MapPointRepository>());
+        services.AddScoped<IMapPointCommandRepository>(sp => sp.GetRequiredService<MapPointRepository>());
+
         services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
-        services.AddScoped<ICategoryRepository, CategoryRepository>();
+
+        services.AddScoped<CategoryRepository>();
+        services.AddScoped<ICategoryRepository>(sp => sp.GetRequiredService<CategoryRepository>());
+        services.AddScoped<ICategoryQueryRepository>(sp => sp.GetRequiredService<CategoryRepository>());
+        services.AddScoped<ICategoryCommandRepository>(sp => sp.GetRequiredService<CategoryRepository>());
+        services.AddScoped<IMapPointCategoryLinkRepository>(sp => sp.GetRequiredService<CategoryRepository>());
 
         if (useInMemoryDatabase)
             services.AddSingleton<IAppLogWriter, NullAppLogWriter>();

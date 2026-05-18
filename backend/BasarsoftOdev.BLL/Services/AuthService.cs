@@ -10,6 +10,7 @@ using Microsoft.Extensions.Options;
 
 namespace BasarsoftOdev.BLL.Services;
 
+/// <summary>Identity üzerinden giriş/kayıt; JWT ve refresh token yaşam döngüsü.</summary>
 public class AuthService : IAuthService
 {
     private readonly UserManager<ApplicationUser> _userManager;

@@ -6,6 +6,9 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace BasarsoftOdev.Api.Controllers;
 
+/// <summary>
+/// Kategori CRUD. Liste herkese açık; yazma işlemleri yalnızca Admin rolünde.
+/// </summary>
 [ApiController]
 [Route("api/[controller]")]
 [Produces("application/json")]
@@ -25,6 +28,7 @@ public class CategoriesController : ControllerBase
         return Ok(ApiResponse<IReadOnlyList<CategoryDto>>.Ok(dtos, HttpContext.TraceIdentifier));
     }
 
+    /// <summary>Admin — kategori yönetim ekranı için tekil kayıt.</summary>
     [HttpGet("{id:int}")]
     [Authorize(Roles = "Admin")]
     [ProducesResponseType(typeof(ApiResponse<CategoryDto>), StatusCodes.Status200OK)]
@@ -37,6 +41,7 @@ public class CategoriesController : ControllerBase
         return Ok(ApiResponse<CategoryDto>.Ok(item, HttpContext.TraceIdentifier));
     }
 
+    /// <summary>Sıra numarası benzersiz olmalıdır (409).</summary>
     [HttpPost]
     [Authorize(Roles = "Admin")]
     [ProducesResponseType(typeof(ApiResponse<CategoryDto>), StatusCodes.Status201Created)]
@@ -49,6 +54,7 @@ public class CategoriesController : ControllerBase
             ApiResponse<CategoryDto>.Ok(created, HttpContext.TraceIdentifier));
     }
 
+    /// <summary>Ad değişirse ilgili map_points.Category alanları da güncellenir.</summary>
     [HttpPut("{id:int}")]
     [Authorize(Roles = "Admin")]
     [ProducesResponseType(typeof(ApiResponse<CategoryDto>), StatusCodes.Status200OK)]
@@ -61,6 +67,7 @@ public class CategoriesController : ControllerBase
         return Ok(ApiResponse<CategoryDto>.Ok(updated, HttpContext.TraceIdentifier));
     }
 
+    /// <summary>Kullanımda olan kategori silinemez (409).</summary>
     [HttpDelete("{id:int}")]
     [Authorize(Roles = "Admin")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
